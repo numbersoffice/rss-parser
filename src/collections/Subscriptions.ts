@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { APIError, type CollectionConfig } from 'payload'
 
 import { sourceTypeOptions } from '@/adapters/registry'
-import { isAdminField, isAdminOrOwner, isLoggedIn } from '@/lib/access'
+import { adminFieldCondition, isAdminField, isAdminOrOwner, isLoggedIn } from '@/lib/access'
 import { refreshSource } from '@/lib/refresh'
 import {
   deleteSourceIfOrphaned,
@@ -60,7 +60,7 @@ export const Subscriptions: CollectionConfig = {
       index: true,
       defaultValue: ({ user }) => user?.id,
       access: { update: isAdminField },
-      admin: { position: 'sidebar' },
+      admin: { position: 'sidebar', condition: adminFieldCondition },
     },
     {
       name: 'source',
@@ -71,6 +71,7 @@ export const Subscriptions: CollectionConfig = {
       admin: {
         position: 'sidebar',
         readOnly: true,
+        condition: adminFieldCondition,
         description: 'Shared source — resolved automatically from type + handle',
       },
     },
@@ -90,6 +91,9 @@ export const Subscriptions: CollectionConfig = {
         readOnly: true,
         position: 'sidebar',
         description: 'Subscribe to this URL in your RSS reader. Private to this subscription.',
+        components: {
+          Field: '@/components/FeedUrlField#FeedUrlField',
+        },
       },
       hooks: {
         afterRead: [

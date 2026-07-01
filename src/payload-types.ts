@@ -137,11 +137,11 @@ export interface Subscription {
    * Account to follow, e.g. the Instagram username (without @). To follow a different account, delete this subscription and add a new one.
    */
   handle: string;
-  user: number | User;
+  user?: (number | null) | User;
   /**
    * Shared source — resolved automatically from type + handle
    */
-  source: number | Source;
+  source?: (number | null) | Source;
   token: string;
   /**
    * Subscribe to this URL in your RSS reader. Private to this subscription.
