@@ -1,13 +1,22 @@
 import type { CollectionConfig } from 'payload'
 
+import { hiddenFromNonAdmins, isAdmin } from '@/lib/access'
+
 /**
  * Normalized cache of fetched posts. Populated by the refresh logic
  * (src/lib/refresh.ts) — treat as read-only in the admin.
  */
 export const FeedItems: CollectionConfig = {
   slug: 'feed-items',
+  access: {
+    read: isAdmin,
+    create: isAdmin,
+    update: isAdmin,
+    delete: isAdmin,
+  },
   admin: {
     useAsTitle: 'title',
+    hidden: hiddenFromNonAdmins,
     defaultColumns: ['title', 'source', 'publishedAt'],
     description: 'Fetched posts, kept in sync automatically — no need to edit these',
   },

@@ -52,7 +52,7 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
     result = { status: 'success', itemCount: items.length }
   } catch (err) {
     result = { status: 'error', error: err instanceof Error ? err.message : String(err) }
-    payload.logger.warn(`Refresh failed for source "${source.slug}": ${result.error}`)
+    payload.logger.warn(`Refresh failed for source "${source.name}": ${result.error}`)
   }
 
   await payload.update({

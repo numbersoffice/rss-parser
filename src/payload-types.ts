@@ -67,6 +67,7 @@ export interface Config {
   };
   blocks: {};
   collections: {
+    subscriptions: Subscription;
     sources: Source;
     'feed-items': FeedItem;
     users: User;
@@ -77,6 +78,7 @@ export interface Config {
   };
   collectionsJoins: {};
   collectionsSelect: {
+    subscriptions: SubscriptionsSelect<false> | SubscriptionsSelect<true>;
     sources: SourcesSelect<false> | SourcesSelect<true>;
     'feed-items': FeedItemsSelect<false> | FeedItemsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
@@ -120,7 +122,65 @@ export interface UserAuthOperations {
   };
 }
 /**
- * Each source becomes an RSS feed at /feeds/{slug}
+ * Your feeds. Each subscription has its own private feed URL — deleting the subscription breaks the URL.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "subscriptions".
+ */
+export interface Subscription {
+  id: number;
+  /**
+   * Which platform to follow
+   */
+  type: 'instagram';
+  /**
+   * Account to follow, e.g. the Instagram username (without @). To follow a different account, delete this subscription and add a new one.
+   */
+  handle: string;
+  user: number | User;
+  /**
+   * Shared source — resolved automatically from type + handle
+   */
+  source: number | Source;
+  token: string;
+  /**
+   * Subscribe to this URL in your RSS reader. Private to this subscription.
+   */
+  feedUrl?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "users".
+ */
+export interface User {
+  id: number;
+  /**
+   * Admins manage users and shared sources; users manage their own subscriptions.
+   */
+  role: 'user' | 'admin';
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
+  password?: string | null;
+  collection: 'users';
+}
+/**
+ * Shared, one per followed account — created and removed automatically as users subscribe
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "sources".
@@ -128,13 +188,9 @@ export interface UserAuthOperations {
 export interface Source {
   id: number;
   /**
-   * Display name — becomes the RSS channel title
+   * Becomes the RSS channel title. Defaults to the handle.
    */
   name: string;
-  /**
-   * Used in the feed URL. Generated from the name if left empty.
-   */
-  slug?: string | null;
   /**
    * Which platform this source pulls from
    */
@@ -143,15 +199,14 @@ export interface Source {
    * Account to follow, e.g. the Instagram username (without @)
    */
   handle: string;
+  /**
+   * Kill-switch: disabled sources stop fetching and their feeds return 404
+   */
   enabled?: boolean | null;
   /**
    * How long fetched items are considered fresh before the feed re-fetches
    */
   refreshIntervalMinutes?: number | null;
-  /**
-   * Subscribe to this URL in your RSS reader
-   */
-  feedUrl?: string | null;
   lastFetchedAt?: string | null;
   lastFetchStatus?: ('success' | 'error') | null;
   lastFetchError?: string | null;
@@ -187,31 +242,6 @@ export interface FeedItem {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "users".
- */
-export interface User {
-  id: number;
-  updatedAt: string;
-  createdAt: string;
-  email: string;
-  resetPasswordToken?: string | null;
-  resetPasswordExpiration?: string | null;
-  salt?: string | null;
-  hash?: string | null;
-  loginAttempts?: number | null;
-  lockUntil?: string | null;
-  sessions?:
-    | {
-        id: string;
-        createdAt?: string | null;
-        expiresAt: string;
-      }[]
-    | null;
-  password?: string | null;
-  collection: 'users';
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -234,6 +264,10 @@ export interface PayloadKv {
 export interface PayloadLockedDocument {
   id: number;
   document?:
+    | ({
+        relationTo: 'subscriptions';
+        value: number | Subscription;
+      } | null)
     | ({
         relationTo: 'sources';
         value: number | Source;
@@ -290,16 +324,28 @@ export interface PayloadMigration {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "subscriptions_select".
+ */
+export interface SubscriptionsSelect<T extends boolean = true> {
+  type?: T;
+  handle?: T;
+  user?: T;
+  source?: T;
+  token?: T;
+  feedUrl?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "sources_select".
  */
 export interface SourcesSelect<T extends boolean = true> {
   name?: T;
-  slug?: T;
   type?: T;
   handle?: T;
   enabled?: T;
   refreshIntervalMinutes?: T;
-  feedUrl?: T;
   lastFetchedAt?: T;
   lastFetchStatus?: T;
   lastFetchError?: T;
@@ -326,6 +372,7 @@ export interface FeedItemsSelect<T extends boolean = true> {
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  role?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;

@@ -1,30 +1,41 @@
 import type { CollectionConfig } from 'payload'
 
 import { sourceTypeOptions } from '@/adapters/registry'
+import { hiddenFromNonAdmins, isAdmin, isLoggedIn } from '@/lib/access'
 import { refreshSource } from '@/lib/refresh'
+import { defaultSourceName, normalizeHandle } from '@/lib/sources'
 
-const slugify = (value: string): string =>
-  value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-
+/**
+ * Canonical feeds: one document per (type, handle), shared by every
+ * subscriber so an account is only fetched once. Created and garbage-
+ * collected automatically as users subscribe/unsubscribe — admins rarely
+ * need to touch these.
+ */
 export const Sources: CollectionConfig = {
   slug: 'sources',
   admin: {
     useAsTitle: 'name',
+    hidden: hiddenFromNonAdmins,
     defaultColumns: ['name', 'type', 'handle', 'enabled', 'lastFetchStatus', 'lastFetchedAt'],
-    description: 'Each source becomes an RSS feed at /feeds/{slug}',
+    description:
+      'Shared, one per followed account — created and removed automatically as users subscribe',
   },
+  access: {
+    // Authenticated read so the source relationship on subscriptions can populate.
+    read: isLoggedIn,
+    create: isAdmin,
+    update: isAdmin,
+    delete: isAdmin,
+  },
+  indexes: [{ fields: ['type', 'handle'], unique: true }],
   endpoints: [
     {
       // POST /api/sources/:id/refresh — force a fetch regardless of TTL
       path: '/:id/refresh',
       method: 'post',
       handler: async (req) => {
-        if (!req.user) {
-          return Response.json({ error: 'Unauthorized' }, { status: 401 })
+        if (req.user?.role !== 'admin') {
+          return Response.json({ error: 'Forbidden' }, { status: req.user ? 403 : 401 })
         }
         const id = req.routeParams?.id as string
         const result = await refreshSource(req.payload, id)
@@ -37,22 +48,7 @@ export const Sources: CollectionConfig = {
       name: 'name',
       type: 'text',
       required: true,
-      admin: { description: 'Display name — becomes the RSS channel title' },
-    },
-    {
-      name: 'slug',
-      type: 'text',
-      unique: true,
-      index: true,
-      admin: {
-        position: 'sidebar',
-        description: 'Used in the feed URL. Generated from the name if left empty.',
-      },
-      hooks: {
-        beforeValidate: [
-          ({ value, data }) => value || (data?.name ? slugify(data.name) : value),
-        ],
-      },
+      admin: { description: 'Becomes the RSS channel title. Defaults to the handle.' },
     },
     {
       name: 'type',
@@ -72,7 +68,10 @@ export const Sources: CollectionConfig = {
       name: 'enabled',
       type: 'checkbox',
       defaultValue: true,
-      admin: { position: 'sidebar' },
+      admin: {
+        position: 'sidebar',
+        description: 'Kill-switch: disabled sources stop fetching and their feeds return 404',
+      },
     },
     {
       name: 'refreshIntervalMinutes',
@@ -82,24 +81,6 @@ export const Sources: CollectionConfig = {
       admin: {
         position: 'sidebar',
         description: 'How long fetched items are considered fresh before the feed re-fetches',
-      },
-    },
-    {
-      name: 'feedUrl',
-      type: 'text',
-      virtual: true,
-      admin: {
-        readOnly: true,
-        position: 'sidebar',
-        description: 'Subscribe to this URL in your RSS reader',
-      },
-      hooks: {
-        afterRead: [
-          ({ siblingData }) =>
-            siblingData?.slug
-              ? `${process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000'}/feeds/${siblingData.slug}`
-              : undefined,
-        ],
       },
     },
     {
@@ -127,6 +108,16 @@ export const Sources: CollectionConfig = {
     },
   ],
   hooks: {
+    beforeValidate: [
+      ({ data, operation }) => {
+        if (!data) return data
+        if (typeof data.handle === 'string') data.handle = normalizeHandle(data.handle)
+        if (operation === 'create' && !data.name && data.type && data.handle) {
+          data.name = defaultSourceName(data.type, data.handle)
+        }
+        return data
+      },
+    ],
     afterChange: [
       // Populate the feed right away when a source is created or re-pointed,
       // so the admin sees items (or an error) without waiting for a reader poll.
@@ -141,11 +132,21 @@ export const Sources: CollectionConfig = {
         }
       },
     ],
-    afterDelete: [
+    beforeDelete: [
+      // Cascade before the row goes: subscriptions and feed-items reference the
+      // source with NOT NULL foreign keys, so they must be gone first.
       async ({ id, req }) => {
+        await req.payload.delete({
+          collection: 'subscriptions',
+          where: { source: { equals: id } },
+          // Their afterDelete hooks must not GC this source — it's already going.
+          context: { cascadeFromSource: true },
+          req,
+        })
         await req.payload.delete({
           collection: 'feed-items',
           where: { source: { equals: id } },
+          req,
         })
       },
     ],

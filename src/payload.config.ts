@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 
 import { FeedItems } from './collections/FeedItems'
 import { Sources } from './collections/Sources'
+import { Subscriptions } from './collections/Subscriptions'
 import { Users } from './collections/Users'
 
 const filename = fileURLToPath(import.meta.url)
@@ -18,7 +19,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Sources, FeedItems, Users],
+  collections: [Subscriptions, Sources, FeedItems, Users],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
