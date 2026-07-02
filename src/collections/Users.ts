@@ -1,6 +1,12 @@
 import type { CollectionConfig } from 'payload'
 
-import { hiddenFromNonAdmins, isAdmin, isAdminField, isAdminOrSelf } from '@/lib/access'
+import {
+  adminFieldCondition,
+  hiddenFromNonAdmins,
+  isAdmin,
+  isAdminField,
+  isAdminOrSelf,
+} from '@/lib/access'
 
 export const Users: CollectionConfig = {
   slug: 'users',
@@ -61,6 +67,7 @@ export const Users: CollectionConfig = {
       access: { update: isAdminField },
       admin: {
         position: 'sidebar',
+        condition: adminFieldCondition,
         description: 'Admins manage users and shared sources; users manage their own subscriptions.',
       },
     },

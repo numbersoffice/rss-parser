@@ -15,11 +15,31 @@ const dirname = path.dirname(filename)
 export default buildConfig({
   admin: {
     user: Users.slug,
+    avatar: {
+      Component: '/components/AccountAvatar#AccountAvatar',
+    },
     components: {
       graphics: {
         Logo: '/components/Wordmark#LoginLogo',
         Icon: '/components/Wordmark#NavIcon',
       },
+      views: {
+        dashboard: {
+          Component: '/components/RoleDashboard#RoleDashboard',
+        },
+      },
+    },
+    dashboard: {
+      widgets: [
+        {
+          slug: 'subscriptions-overview',
+          label: 'Subscriptions overview',
+          Component: '/components/SubscriptionsWidget#SubscriptionsWidget',
+          // minWidth doubles as the size a freshly added widget spawns at
+          minWidth: 'small',
+          maxWidth: 'medium',
+        },
+      ],
     },
     importMap: {
       baseDir: path.resolve(dirname),

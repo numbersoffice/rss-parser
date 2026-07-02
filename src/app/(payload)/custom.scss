@@ -8,6 +8,9 @@
  */
 
 :root {
+  /* the landing page accent (default browser link blue) */
+  --accent: #0000ee;
+
   /* one mono stack for everything, like the landing page */
   --font-body: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
@@ -16,6 +19,11 @@
   --style-radius-s: 0;
   --style-radius-m: 0;
   --style-radius-l: 0;
+}
+
+/* #0000ee is illegible on the dark background */
+html[data-theme='dark'] {
+  --accent: #7373ff;
 }
 
 /* ~/rss-parser wordmark (src/components/Wordmark.tsx), shown as the login logo */
@@ -46,4 +54,143 @@
   font-weight: 700;
   font-size: 0.9rem;
   white-space: nowrap;
+}
+
+/* Subscriptions overview dashboard widget (src/components/SubscriptionsWidget.tsx):
+   a static card with an explicit "View all" link and a create shortcut. */
+.subs-widget {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: calc(var(--base) / 2);
+  height: 100%;
+  padding: var(--base);
+  background: var(--theme-elevation-50);
+  border: 1px solid var(--theme-elevation-150);
+}
+
+.subs-widget__summary {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--base) / 2);
+}
+
+.subs-widget__count {
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.subs-widget__label {
+  display: flex;
+  flex-direction: column;
+  font-weight: 700;
+}
+
+.subs-widget__sublabel {
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--theme-elevation-500);
+}
+
+.subs-widget__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--base);
+}
+
+/* same hover behavior as the breadcrumb "Home" link: underline appears on hover */
+.subs-widget__view-all {
+  color: var(--theme-text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.subs-widget__view-all:hover,
+.subs-widget__view-all:focus-visible {
+  text-decoration: underline;
+}
+
+/* same treatment as the landing page CTA (.cta in (frontend)/styles.css),
+   scaled down: solid border with an offset accent shadow that the button
+   presses into on hover/active */
+.subs-widget__create {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--theme-text);
+  background: var(--theme-bg);
+  color: var(--theme-text);
+  box-shadow: 2px 2px 0 var(--accent);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.subs-widget__create:hover {
+  box-shadow: 1px 1px 0 var(--accent);
+  transform: translate(1px, 1px);
+}
+
+.subs-widget__create:active {
+  box-shadow: none;
+  transform: translate(2px, 2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subs-widget__create:hover,
+  .subs-widget__create:active {
+    transform: none;
+  }
+}
+
+.subs-widget__create .icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* text-only account link in the top-right (src/components/AccountAvatar.tsx),
+   same hover behavior as the breadcrumb "Home" link */
+.account-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.app-header__account:hover .account-name,
+.app-header__account:focus-visible .account-name {
+  text-decoration: underline;
+}
+
+/* short explainer above the user dashboard's widgets */
+.user-dashboard__intro {
+  max-width: 44rem;
+  margin-bottom: var(--base);
+}
+
+.user-dashboard__intro h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.user-dashboard__intro p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--theme-elevation-600);
+}
+
+/* fixed (non-editable) user dashboard: sizing and spacing live on the grid,
+   widgets span columns (one column ≈ the editable dashboard's "small") */
+.user-dashboard {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .user-dashboard {
+    grid-template-columns: 1fr;
+  }
 }

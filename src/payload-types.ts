@@ -95,6 +95,7 @@ export interface Config {
   globalsSelect: {};
   locale: null;
   widgets: {
+    'subscriptions-overview': SubscriptionsOverviewWidget;
     collections: CollectionsWidget;
   };
   user: User;
@@ -159,7 +160,7 @@ export interface User {
   /**
    * Admins manage users and shared sources; users manage their own subscriptions.
    */
-  role: 'user' | 'admin';
+  role?: ('user' | 'admin') | null;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -429,6 +430,16 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "subscriptions-overview_widget".
+ */
+export interface SubscriptionsOverviewWidget {
+  data?: {
+    [k: string]: unknown;
+  };
+  width: 'small' | 'medium';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

@@ -1,0 +1,55 @@
+import type { WidgetServerProps } from 'payload'
+
+import { PlusIcon } from '@payloadcms/ui'
+import Link from 'next/link'
+import { formatAdminURL } from 'payload/shared'
+import React from 'react'
+
+/**
+ * Dashboard widget: a visual stand-in for the Subscriptions collection card.
+ * Shows how many feeds you follow, with explicit actions to view the full
+ * list or create a new subscription.
+ *
+ * Registered under admin.dashboard.widgets in payload.config.ts; users add it
+ * from the dashboard editor.
+ */
+export async function SubscriptionsWidget(props: WidgetServerProps) {
+  const { req } = props
+  const { payload, user } = req
+  if (!user) return null
+
+  // overrideAccess: false applies the collection's read access, so users get
+  // their own count and admins get everyone's — same as the list view.
+  const { totalDocs } = await payload.count({
+    collection: 'subscriptions',
+    overrideAccess: false,
+    user,
+  })
+
+  const adminRoute = payload.config.routes.admin
+  const listHref = formatAdminURL({ adminRoute, path: '/collections/subscriptions' })
+  const createHref = formatAdminURL({ adminRoute, path: '/collections/subscriptions/create' })
+
+  return (
+    <div className="subs-widget">
+      <div className="subs-widget__summary">
+        <span className="subs-widget__count">{totalDocs}</span>
+        <span className="subs-widget__label">
+          {totalDocs === 1 ? 'subscription' : 'subscriptions'}
+          <span className="subs-widget__sublabel">
+            {user.role === 'admin' ? 'across all users' : 'feeds you follow'}
+          </span>
+        </span>
+      </div>
+      <div className="subs-widget__actions">
+        <Link className="subs-widget__view-all" href={listHref} prefetch={false}>
+          View all →
+        </Link>
+        <Link className="subs-widget__create" href={createHref} prefetch={false}>
+          <PlusIcon />
+          New subscription
+        </Link>
+      </div>
+    </div>
+  )
+}
