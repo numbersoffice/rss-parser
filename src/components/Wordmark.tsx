@@ -19,3 +19,12 @@ export function Wordmark({ className }: { className?: string }) {
 export function LoginLogo() {
   return <Wordmark className="login-wordmark" />
 }
+
+/**
+ * Registered as admin.components.graphics.Icon — the mark at the start of the
+ * dashboard breadcrumbs and the collapsed nav. The Icon slot renders arbitrary
+ * markup, so we use the word "Home" instead of a square glyph.
+ */
+export function NavIcon() {
+  return <span className="nav-home">Home</span>
+}

@@ -18,6 +18,7 @@ export default buildConfig({
     components: {
       graphics: {
         Logo: '/components/Wordmark#LoginLogo',
+        Icon: '/components/Wordmark#NavIcon',
       },
     },
     importMap: {

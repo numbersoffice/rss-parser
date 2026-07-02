@@ -33,3 +33,17 @@
   font-size: 1.75rem;
   line-height: 1;
 }
+
+/* "Home" replaces the square Payload glyph at the start of the breadcrumbs.
+   Payload sizes .step-nav__home to a fixed 18px square for a glyph, which
+   clips the text to "H…" — let it size to the word instead. */
+.step-nav__home {
+  width: auto;
+  height: auto;
+}
+
+.nav-home {
+  font-weight: 700;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
