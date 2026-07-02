@@ -73,26 +73,26 @@ export default async function HomePage() {
       {!user && (
         <>
           <p>
-            This instance turns public Instagram accounts into plain RSS 2.0 feeds. Add a handle,
-            get a feed URL, paste it into your reader. No app, no algorithm, no Instagram account.
+            This tool turns public Instagram accounts into plain feeds. Add a handle, get a feed
+            URL, paste it into your reader. No app, no algorithm, no Instagram account.
           </p>
           <ul className="facts">
             <li>
-              Each account is fetched once and shared by everyone here — The Instagram API sees only
-              one visitor.
+              Data for instagram accounts is fetched once and shared by everyone here. The Instagram
+              API sees only one visitor.
             </li>
             <li>
               Your feed URL is unguessable and yours alone. Delete the subscription and the URL
               stops working.
             </li>
             <li>
-              Open source, one SQLite file, runs anywhere Node runs. New platforms are a one-file
-              adapter away.
+              Open source, SQLite DB, extensible . New platforms connectors are just one
+              adapter-file away.
             </li>
           </ul>
           <p className="cta-row">
             <a className="cta" href={payloadConfig.routes.admin}>
-              [ log in / create an account → ]
+              log in / create an account →
             </a>
           </p>
         </>
@@ -103,7 +103,7 @@ export default async function HomePage() {
           <h2 className="section-label"># your feeds</h2>
           {subscriptions && subscriptions.docs.length === 0 && (
             <p>
-              No feeds yet — create a subscription in the dashboard and your private feed URLs will
+              No feeds yet. Create a subscription in the dashboard and your private feed URLs will
               show up here.
             </p>
           )}

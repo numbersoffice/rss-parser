@@ -16,20 +16,18 @@ const dirname = path.dirname(filename)
 export default buildConfig({
   admin: {
     user: Users.slug,
-    avatar: {
-      Component: '/components/AccountAvatar#AccountAvatar',
-    },
     components: {
       graphics: {
         Logo: '/components/Wordmark#LoginLogo',
         Icon: '/components/Wordmark#NavIcon',
       },
-      providers: ['/components/RoleStyles#RoleStyles'],
       views: {
         dashboard: {
           Component: '/components/RoleDashboard#RoleDashboard',
         },
       },
+      actions: ['/components/LogoutLink#LogoutLink', '/components/AccountLink#AccountLink'],
+      providers: ['/components/RoleStyles#RoleStyles'],
     },
     dashboard: {
       widgets: [

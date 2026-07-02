@@ -194,17 +194,25 @@ html[data-theme='dark'] {
   display: none;
 }
 
-/* text-only account link in the top-right (src/components/AccountAvatar.tsx),
-   same hover behavior as the breadcrumb "Home" link */
-.account-name {
+/* text links in the top-right header actions — account name and "Log out"
+   (src/components/AccountLink.tsx, LogoutLink.tsx) — same hover behavior as
+   the breadcrumb "Home" link */
+.header-link {
+  color: var(--theme-text);
   font-weight: 700;
   font-size: 0.9rem;
   white-space: nowrap;
+  text-decoration: none;
 }
 
-.app-header__account:hover .account-name,
-.app-header__account:focus-visible .account-name {
+.header-link:hover,
+.header-link:focus-visible {
   text-decoration: underline;
+}
+
+/* Payload's avatar button — replaced by the AccountLink header action */
+.app-header__account {
+  display: none;
 }
 
 /* short explainer above the user dashboard's widgets */

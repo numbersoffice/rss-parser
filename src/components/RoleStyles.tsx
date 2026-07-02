@@ -1,34 +1,56 @@
-import type { TypedUser } from 'payload'
+'use client'
+
+import { useAuth } from '@payloadcms/ui'
 import React from 'react'
 
+import type { User } from '@/payload-types'
+
 /*
- * Non-admins get a simplified subscriptions list: the Columns and Filters
- * toggles are hidden, the search bar stays. Purely cosmetic — access control
- * already scopes queries to the user's own docs.
+ * Non-admins get a simplified admin UI. Purely cosmetic — access control
+ * already scopes queries and mutations to the user's own docs.
+ *
+ * - Subscriptions list: Columns and Filters toggles hidden, search stays.
+ * - No nav sidebar: the layout grid becomes a single full-width column (the
+ *   hidden nav stops being a grid item, so the content must not be left in
+ *   a zero-width first column), the togglers disappear, and the nav-open
+ *   dim overlay is disabled. Users navigate via the dashboard; logging out
+ *   happens through the header link (src/components/LogoutLink.tsx).
  */
 const nonAdminCss = `
 .collection-list--subscriptions .list-controls__toggle-columns,
 .collection-list--subscriptions .list-controls__toggle-where {
   display: none;
 }
+
+.template-default {
+  grid-template-columns: 1fr;
+}
+
+.template-default .nav,
+.template-default__nav-toggler-wrapper,
+.app-header__mobile-nav-toggler,
+.template-default__wrap::before {
+  display: none;
+}
 `
 
 /**
- * Server provider (admin.components.providers): injects role-scoped CSS to
- * simplify the admin UI for non-admin users. Rendered on the server from the
- * authenticated request, so the hidden controls never flash before hydration
- * and no client JS is involved.
+ * Provider (admin.components.providers): injects role-scoped CSS to simplify
+ * the admin UI for non-admin users. Client-side on purpose: the root layout
+ * (where providers live) renders once per full page load, so a server
+ * component here would keep the pre-login auth state until a hard reload.
+ * useAuth() tracks login/logout as they happen.
  */
-export function RoleStyles({
-  children,
-  user,
-}: {
-  children?: React.ReactNode
-  user?: TypedUser | null
-}) {
+export function RoleStyles({ children }: { children?: React.ReactNode }) {
+  const { user } = useAuth<User>()
+
   return (
     <>
-      {user && user.role !== 'admin' && <style>{nonAdminCss}</style>}
+      {/* data-role marks what the provider saw — handy when debugging why
+          role CSS did or didn't apply */}
+      <style data-role={user ? user.role : 'anonymous'}>
+        {user && user.role !== 'admin' ? nonAdminCss : ''}
+      </style>
       {children}
     </>
   )

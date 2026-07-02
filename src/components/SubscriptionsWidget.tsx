@@ -46,7 +46,9 @@ export async function SubscriptionsWidget(props: WidgetServerProps) {
           {limit !== null && <span className="subs-widget__limit"> / {limit}</span>}
         </span>
         <span className="subs-widget__label">
-          {totalDocs === 1 ? 'subscription' : 'subscriptions'}
+          {/* "1 / 10" reads as a ratio, so keep it plural whenever a limit
+              is shown; only a bare count ever reads singular */}
+          {limit === null && totalDocs === 1 ? 'subscription' : 'subscriptions'}
           <span className="subs-widget__sublabel">
             {user.role === 'admin' ? 'across all users' : 'feeds you follow'}
           </span>
