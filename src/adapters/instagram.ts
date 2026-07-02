@@ -66,6 +66,18 @@ export const instagramAdapter: SourceAdapter = {
     return `https://www.instagram.com/${(source.handle ?? '').trim().replace(/^@/, '')}/`
   },
 
+  // Instagram CDN URLs are signed; the `oe` query param is the expiry as a
+  // hex-encoded unix timestamp. After it passes, the CDN serves a 403.
+  imageUrlExpiresAt(imageUrl: string): Date | null {
+    try {
+      const oe = new URL(imageUrl).searchParams.get('oe')
+      if (!oe || !/^[0-9A-Fa-f]{1,12}$/.test(oe)) return null
+      return new Date(parseInt(oe, 16) * 1000)
+    } catch {
+      return null
+    }
+  },
+
   async fetchItems(source: Source): Promise<NormalizedItem[]> {
     const username = source.handle?.trim().replace(/^@/, '')
     if (!username) {

@@ -32,4 +32,8 @@ export interface SourceAdapter {
   fetchItems(source: Source): Promise<NormalizedItem[]>
   /** Link to the account/page on the source platform, used as the RSS channel link. */
   sourceUrl?(source: Source): string
+  /** When the platform signs its media URLs with an expiry, return the
+   * expiry of the given image URL so cached items can be refreshed before
+   * their images go dead. Return null if it cannot be determined. */
+  imageUrlExpiresAt?(imageUrl: string): Date | null
 }

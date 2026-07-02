@@ -1,7 +1,7 @@
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
-import { refreshSourceIfStale } from '@/lib/refresh'
+import { refreshSourceIfNeeded } from '@/lib/refresh'
 import { buildRssXml } from '@/lib/rss'
 import { relationId } from '@/lib/sources'
 import type { Source } from '@/payload-types'
@@ -38,17 +38,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     return new Response('Feed not found', { status: 404 })
   }
 
-  await refreshSourceIfStale(payload, source)
-  // Re-read so freshly fetched items and status are reflected.
-  source = (await payload.findByID({ collection: 'sources', id: source.id, depth: 0 })) as Source
+  const findItems = () =>
+    payload.find({
+      collection: 'feed-items',
+      where: { source: { equals: source!.id } },
+      sort: '-publishedAt',
+      limit: MAX_ITEMS,
+      depth: 0,
+    })
 
-  const items = await payload.find({
-    collection: 'feed-items',
-    where: { source: { equals: source.id } },
-    sort: '-publishedAt',
-    limit: MAX_ITEMS,
-    depth: 0,
-  })
+  let items = await findItems()
+  const refreshed = await refreshSourceIfNeeded(payload, source, items.docs)
+  if (refreshed) {
+    // Re-read so freshly fetched items and status are reflected.
+    source = (await payload.findByID({ collection: 'sources', id: source.id, depth: 0 })) as Source
+    items = await findItems()
+  }
 
   const feedUrl = new URL(`/feeds/${token}`, request.url).toString()
   const xml = buildRssXml(source, items.docs, feedUrl)
