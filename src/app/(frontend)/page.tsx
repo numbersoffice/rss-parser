@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import config from '@/payload.config'
+import { Wordmark } from '@/components/Wordmark'
 import './styles.css'
 
 export const dynamic = 'force-dynamic'
@@ -63,8 +64,8 @@ export default async function HomePage() {
   return (
     <div className="page">
       <header className="masthead">
-        <span className="wordmark">rss-parser</span>
-        <span className="masthead-meta">self-hosted · instagram → rss</span>
+        <Wordmark />
+        <span className="masthead-meta">self-hostable · instagram → rss</span>
       </header>
 
       <XmlHero />
@@ -73,13 +74,12 @@ export default async function HomePage() {
         <>
           <p>
             This instance turns public Instagram accounts into plain RSS 2.0 feeds. Add a handle,
-            get a private feed URL, paste it into your reader. No app, no algorithm, no Instagram
-            account.
+            get a feed URL, paste it into your reader. No app, no algorithm, no Instagram account.
           </p>
           <ul className="facts">
             <li>
-              Each account is fetched once and shared by everyone here — Instagram sees one polite
-              visitor, not a crowd.
+              Each account is fetched once and shared by everyone here — The Instagram API sees only
+              one visitor.
             </li>
             <li>
               Your feed URL is unguessable and yours alone. Delete the subscription and the URL
