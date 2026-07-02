@@ -67,6 +67,14 @@ a:focus-visible {
   font-weight: 700;
 }
 
+/* the wordmark links home but reads as plain text — only the cursor gives it away */
+.wordmark-link,
+.wordmark-link:visited {
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+
 .wordmark-tilde {
   color: var(--muted);
   font-weight: 400;
@@ -146,6 +154,9 @@ p {
 
 .cta-row {
   margin: 2.5rem 0;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .cta {
@@ -179,7 +190,6 @@ p {
     transform: none;
   }
 }
-
 /* logged-in feed list ------------------------------------------------ */
 
 .section-label {

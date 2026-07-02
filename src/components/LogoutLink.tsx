@@ -5,12 +5,11 @@ import { formatAdminURL } from 'payload/shared'
 
 /**
  * "Log out" text link in the top-right header (admin.components.actions),
- * next to the account link. Only for regular users — their nav sidebar (and
- * with it Payload's usual logout button) is hidden via RoleStyles; admins
- * keep the nav and its logout.
+ * next to the account link, for every logged-in user. Payload's own logout
+ * button in the nav sidebar is hidden via custom.scss (.nav__log-out).
  */
 export function LogoutLink({ payload, user }: { payload: Payload; user?: TypedUser | null }) {
-  if (!user || user.role === 'admin') return null
+  if (!user) return null
 
   const href = formatAdminURL({
     adminRoute: payload.config.routes.admin,
@@ -19,7 +18,7 @@ export function LogoutLink({ payload, user }: { payload: Payload; user?: TypedUs
 
   return (
     <Link className="header-link" href={href} prefetch={false}>
-      Log out
+      Logout
     </Link>
   )
 }

@@ -42,6 +42,14 @@ html[data-theme='dark'] {
   line-height: 1;
 }
 
+/* the wordmark links back to the landing page but reads as plain text —
+   only the cursor gives it away */
+.wordmark-link {
+  color: var(--theme-text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
 /* "Home" replaces the square Payload glyph at the start of the breadcrumbs.
    Payload sizes .step-nav__home to a fixed 18px square for a glyph, which
    clips the text to "H…" — let it size to the word instead. */
@@ -50,9 +58,9 @@ html[data-theme='dark'] {
   height: auto;
 }
 
+/* no font-size: inherit the breadcrumb size like Payload's own step-nav links */
 .nav-home {
   font-weight: 700;
-  font-size: 0.9rem;
   white-space: nowrap;
 }
 
@@ -194,6 +202,13 @@ html[data-theme='dark'] {
   display: none;
 }
 
+/* the account and "Log out" text links sit in Payload's actions slot, whose
+   default gap (--base / 2) is tuned for icon buttons — text links need more
+   air between them */
+.app-header__actions {
+  gap: var(--base);
+}
+
 /* text links in the top-right header actions — account name and "Log out"
    (src/components/AccountLink.tsx, LogoutLink.tsx) — same hover behavior as
    the breadcrumb "Home" link */
@@ -215,6 +230,12 @@ html[data-theme='dark'] {
   display: none;
 }
 
+/* Payload's logout icon at the bottom of the nav sidebar — replaced by the
+   LogoutLink header action, which now shows for admins too */
+.nav__log-out {
+  display: none;
+}
+
 /* short explainer above the user dashboard's widgets */
 .user-dashboard__intro {
   max-width: 44rem;
@@ -232,6 +253,64 @@ html[data-theme='dark'] {
   color: var(--theme-elevation-600);
 }
 
+/* Primary buttons in the landing-page CTA style (.cta in (frontend)/styles.css):
+   paper background, ink border, offset accent shadow the button presses into.
+   Covers login / forgot-password / reset-password / create-first-user and all
+   admin primary actions via .btn--style-primary. Colors go through the custom
+   properties the Button component consumes; radius 0 already comes from the
+   --style-radius-s override above. */
+.btn--style-primary {
+  --color: var(--theme-text);
+  --bg-color: var(--theme-bg);
+  --btn-border: 1px solid var(--theme-text);
+  --hover-color: var(--theme-text);
+  --hover-bg: var(--theme-bg);
+  --hover-btn-border: 1px solid var(--theme-text);
+  font-weight: 700;
+  box-shadow: 3px 3px 0 var(--accent);
+}
+
+.btn--style-primary:hover,
+.btn--style-primary:focus-visible {
+  box-shadow: 1px 1px 0 var(--accent);
+  transform: translate(2px, 2px);
+}
+
+.btn--style-primary:active {
+  box-shadow: none;
+  transform: translate(3px, 3px);
+}
+
+.btn--style-primary.btn--disabled {
+  --color: var(--theme-elevation-400);
+  --btn-border: 1px solid var(--theme-elevation-400);
+  --hover-color: var(--color);
+  --hover-btn-border: var(--btn-border);
+  box-shadow: none;
+}
+
+.btn--style-primary.btn--disabled:hover,
+.btn--style-primary.btn--disabled:active {
+  box-shadow: none;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn--style-primary:hover,
+  .btn--style-primary:active {
+    transform: none;
+  }
+}
+
+/* "no account yet? create one →" under the login form
+   (src/components/RegisterLink.tsx, admin.components.afterLogin) */
+.register-link {
+  text-align: center;
+}
+
+.register-link a {
+  color: var(--accent);
+}
 /* fixed (non-editable) user dashboard: sizing and spacing live on the grid,
    widgets span columns (one column ≈ the editable dashboard's "small") */
 .user-dashboard {

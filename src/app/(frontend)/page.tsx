@@ -64,7 +64,9 @@ export default async function HomePage() {
   return (
     <div className="page">
       <header className="masthead">
-        <Wordmark />
+        <a className="wordmark-link" href="/">
+          <Wordmark />
+        </a>
         <span className="masthead-meta">self-hostable · instagram → rss</span>
       </header>
 
@@ -92,7 +94,10 @@ export default async function HomePage() {
           </ul>
           <p className="cta-row">
             <a className="cta" href={payloadConfig.routes.admin}>
-              log in / create an account →
+              log in →
+            </a>
+            <a className="cta" href="/admin/register">
+              create an account →
             </a>
           </p>
         </>

@@ -9,6 +9,7 @@ import { Sources } from './collections/Sources'
 import { Subscriptions } from './collections/Subscriptions'
 import { Users } from './collections/Users'
 import { Settings } from './globals/Settings'
+import { captchaEndpoint, registerEndpoint } from './lib/registration'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -25,9 +26,23 @@ export default buildConfig({
         dashboard: {
           Component: '/components/RoleDashboard#RoleDashboard',
         },
+        // Custom admin views skip the auth redirect, so this is the public
+        // registration page — styled by the admin like login/forgot-password.
+        register: {
+          Component: '/components/RegisterView#RegisterView',
+          path: '/register',
+          exact: true,
+          meta: {
+            title: 'Create an account',
+            openGraph: {
+              title: 'Create an account — RSS Parser',
+            },
+          },
+        },
       },
       actions: ['/components/LogoutLink#LogoutLink', '/components/AccountLink#AccountLink'],
       providers: ['/components/RoleStyles#RoleStyles'],
+      afterLogin: ['/components/RegisterLink#RegisterLink'],
     },
     dashboard: {
       widgets: [
@@ -44,8 +59,30 @@ export default buildConfig({
     importMap: {
       baseDir: path.resolve(dirname),
     },
+    meta: {
+      titleSuffix: '— RSS Parser',
+      description:
+        'Self-hostable tool that turns public Instagram accounts into plain RSS feeds. ' +
+        'Add a handle, get a private feed URL, paste it into your reader.',
+      openGraph: {
+        title: 'RSS Parser — Instagram → RSS',
+        description:
+          'Self-hostable tool that turns public Instagram accounts into plain RSS feeds. ' +
+          'Add a handle, get a private feed URL, paste it into your reader.',
+        siteName: 'RSS Parser',
+        // stable social-image URL served by src/app/og/route.ts
+        images: [
+          {
+            url: `${process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000'}/og`,
+            width: 1200,
+            height: 630,
+          },
+        ],
+      },
+    },
   },
   collections: [Subscriptions, Sources, FeedItems, Users],
+  endpoints: [captchaEndpoint, registerEndpoint],
   globals: [Settings],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',

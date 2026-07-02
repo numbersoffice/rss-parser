@@ -17,7 +17,11 @@ export function Wordmark({ className }: { className?: string }) {
 
 /** Registered as admin.components.graphics.Logo in payload.config.ts. */
 export function LoginLogo() {
-  return <Wordmark className="login-wordmark" />
+  return (
+    <a className="wordmark-link" href="/">
+      <Wordmark className="login-wordmark" />
+    </a>
+  )
 }
 
 /**

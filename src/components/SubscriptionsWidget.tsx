@@ -55,9 +55,6 @@ export async function SubscriptionsWidget(props: WidgetServerProps) {
         </span>
       </div>
       <div className="subs-widget__actions">
-        <Link className="subs-widget__view-all" href={listHref} prefetch={false}>
-          View all →
-        </Link>
         {limitReached ? (
           <span
             className="subs-widget__create subs-widget__create--disabled"
@@ -73,6 +70,9 @@ export async function SubscriptionsWidget(props: WidgetServerProps) {
             New subscription
           </Link>
         )}
+        <Link className="subs-widget__view-all" href={listHref} prefetch={false}>
+          View all →
+        </Link>
       </div>
     </div>
   )

@@ -25,9 +25,11 @@ export function AccountLink({
     path: payload.config.admin.routes.account,
   })
 
+  const name = user.email?.split('@')[0] || 'account'
+
   return (
     <Link className="header-link" href={href} prefetch={false}>
-      {user.email?.split('@')[0] || 'account'}
+      {name.charAt(0).toUpperCase() + name.slice(1)}
     </Link>
   )
 }
