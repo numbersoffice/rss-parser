@@ -1,0 +1,64 @@
+/*
+ * Admin theme — same tokens as the landing page (src/app/(frontend)/styles.css):
+ * paper #FCFBF7, ink #1C1B18, RSS orange #F26200, system monospace, no radii.
+ *
+ * Payload derives every surface from --color-base-* (elevations, light and
+ * dark theme alike) and uses --color-success-* as its accent scale (links,
+ * selections, active states), so overriding the ramps restyles everything.
+ * Payload's defaults sit in @layer payload-default; un-layered :root wins.
+ */
+
+:root {
+  /* warm gray ramp: paper → ink */
+  --color-base-0: rgb(252, 251, 247);
+  --color-base-50: rgb(241, 240, 236);
+  --color-base-100: rgb(230, 229, 225);
+  --color-base-150: rgb(218, 217, 214);
+  --color-base-200: rgb(207, 206, 202);
+  --color-base-250: rgb(196, 195, 191);
+  --color-base-300: rgb(185, 184, 180);
+  --color-base-350: rgb(174, 173, 169);
+  --color-base-400: rgb(162, 161, 158);
+  --color-base-450: rgb(151, 150, 147);
+  --color-base-500: rgb(140, 139, 136);
+  --color-base-550: rgb(129, 128, 124);
+  --color-base-600: rgb(118, 117, 113);
+  --color-base-650: rgb(106, 105, 102);
+  --color-base-700: rgb(95, 94, 91);
+  --color-base-750: rgb(84, 83, 80);
+  --color-base-800: rgb(73, 72, 69);
+  --color-base-850: rgb(62, 61, 57);
+  --color-base-900: rgb(50, 49, 46);
+  --color-base-950: rgb(39, 38, 35);
+  --color-base-1000: rgb(28, 27, 24);
+
+  /* accent ramp: RSS orange (Payload calls this scale "success") */
+  --color-success-50: rgb(254, 243, 235);
+  --color-success-100: rgb(253, 230, 214);
+  --color-success-150: rgb(251, 213, 184);
+  --color-success-200: rgb(249, 194, 154);
+  --color-success-250: rgb(248, 175, 124);
+  --color-success-300: rgb(247, 156, 94);
+  --color-success-350: rgb(246, 137, 67);
+  --color-success-400: rgb(245, 118, 43);
+  --color-success-450: rgb(244, 108, 20);
+  --color-success-500: rgb(242, 98, 0);
+  --color-success-550: rgb(221, 90, 0);
+  --color-success-600: rgb(200, 82, 0);
+  --color-success-650: rgb(178, 73, 0);
+  --color-success-700: rgb(156, 64, 0);
+  --color-success-750: rgb(134, 55, 0);
+  --color-success-800: rgb(112, 46, 0);
+  --color-success-850: rgb(90, 37, 0);
+  --color-success-900: rgb(68, 28, 0);
+  --color-success-950: rgb(46, 19, 0);
+
+  /* one mono stack for everything, like the landing page */
+  --font-body: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* sharp corners */
+  --style-radius-s: 0;
+  --style-radius-m: 0;
+  --style-radius-l: 0;
+}
