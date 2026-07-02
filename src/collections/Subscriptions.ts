@@ -3,7 +3,13 @@ import { randomBytes } from 'node:crypto'
 import { APIError, type CollectionConfig } from 'payload'
 
 import { sourceTypeOptions } from '@/adapters/registry'
-import { adminFieldCondition, isAdminField, isAdminOrOwner, isLoggedIn } from '@/lib/access'
+import {
+  adminFieldCondition,
+  canCreateSubscription,
+  isAdminField,
+  isAdminOrOwner,
+} from '@/lib/access'
+import { countUserSubscriptions, getSubscriptionLimit } from '@/lib/limits'
 import { refreshSource } from '@/lib/refresh'
 import {
   deleteSourceIfOrphaned,
@@ -23,11 +29,24 @@ export const Subscriptions: CollectionConfig = {
     useAsTitle: 'handle',
     defaultColumns: ['handle', 'type', 'feedUrl', 'createdAt'],
     description:
-      'Your feeds. Each subscription has its own private feed URL — deleting the subscription breaks the URL.',
+      'Your feeds. Each subscription has its own private feed URL, deleting the subscription will invalidate the URL.',
     hideAPIURL: true,
+    components: {
+      beforeListTable: ['/components/SubscriptionLimitCounter#SubscriptionLimitCounter'],
+      views: {
+        edit: {
+          default: {
+            // With the API tab off (hideAPIURL), "Edit" would be the only
+            // tab — a link to the view it's already on. Drop it; custom.scss
+            // collapses the then-empty tab bar.
+            tab: { condition: () => false },
+          },
+        },
+      },
+    },
   },
   access: {
-    create: isLoggedIn,
+    create: canCreateSubscription,
     read: isAdminOrOwner,
     update: isAdminOrOwner,
     delete: isAdminOrOwner,
@@ -118,6 +137,20 @@ export const Subscriptions: CollectionConfig = {
             // Type/handle are immutable for users — delete & re-add instead.
             data.type = originalDoc.type
             data.handle = originalDoc.handle
+          }
+          if (operation === 'create') {
+            // access.create already gates this; re-check inside the
+            // transaction so concurrent creates can't slip past the cap.
+            const [limit, count] = await Promise.all([
+              getSubscriptionLimit(req.payload),
+              countUserSubscriptions(req.payload, req.user.id, req),
+            ])
+            if (count >= limit) {
+              throw new APIError(
+                `Subscription limit reached (${count}/${limit}) — delete a subscription to add a new one`,
+                400,
+              )
+            }
           }
         }
 

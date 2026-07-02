@@ -26,8 +26,7 @@ export function RoleDashboard(props: DashboardViewServerProps) {
         <h2>How this works</h2>
         <p>
           Create a subscription with the Instagram handle you want to follow and you get a private
-          RSS feed URL — paste it into your RSS reader and new posts show up there. Each
-          subscription has its own URL: delete the subscription and its URL stops working.
+          RSS feed URL. Paste it into your RSS reader and new posts show up there.
         </p>
       </div>
       <div className="modular-dashboard user-dashboard">

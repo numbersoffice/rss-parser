@@ -91,8 +91,12 @@ export interface Config {
     defaultIDType: number;
   };
   fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    settings: Setting;
+  };
+  globalsSelect: {
+    settings: SettingsSelect<false> | SettingsSelect<true>;
+  };
   locale: null;
   widgets: {
     'subscriptions-overview': SubscriptionsOverviewWidget;
@@ -123,7 +127,7 @@ export interface UserAuthOperations {
   };
 }
 /**
- * Your feeds. Each subscription has its own private feed URL — deleting the subscription breaks the URL.
+ * Your feeds. Each subscription has its own private feed URL, deleting the subscription will invalidate the URL.
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "subscriptions".
@@ -430,6 +434,29 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "settings".
+ */
+export interface Setting {
+  id: number;
+  /**
+   * How many subscriptions a regular user may have. Lowering it below what a user already has keeps their existing subscriptions but blocks new ones until they are back under the limit. Admins are not limited.
+   */
+  maxSubscriptionsPerUser: number;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "settings_select".
+ */
+export interface SettingsSelect<T extends boolean = true> {
+  maxSubscriptionsPerUser?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

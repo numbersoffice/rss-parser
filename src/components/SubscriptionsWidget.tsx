@@ -3,7 +3,8 @@ import type { WidgetServerProps } from 'payload'
 import { PlusIcon } from '@payloadcms/ui'
 import Link from 'next/link'
 import { formatAdminURL } from 'payload/shared'
-import React from 'react'
+
+import { getSubscriptionLimit } from '@/lib/limits'
 
 /**
  * Dashboard widget: a visual stand-in for the Subscriptions collection card.
@@ -26,6 +27,13 @@ export async function SubscriptionsWidget(props: WidgetServerProps) {
     user,
   })
 
+  // Users are capped (settings global); admins are not. For users totalDocs
+  // is their own count, and it can sit above the limit if an admin lowered
+  // it retroactively — show it as-is (e.g. 20/15), existing subscriptions
+  // keep working.
+  const limit = user.role === 'admin' ? null : await getSubscriptionLimit(payload)
+  const limitReached = limit !== null && totalDocs >= limit
+
   const adminRoute = payload.config.routes.admin
   const listHref = formatAdminURL({ adminRoute, path: '/collections/subscriptions' })
   const createHref = formatAdminURL({ adminRoute, path: '/collections/subscriptions/create' })
@@ -33,7 +41,10 @@ export async function SubscriptionsWidget(props: WidgetServerProps) {
   return (
     <div className="subs-widget">
       <div className="subs-widget__summary">
-        <span className="subs-widget__count">{totalDocs}</span>
+        <span className="subs-widget__count">
+          {totalDocs}
+          {limit !== null && <span className="subs-widget__limit"> / {limit}</span>}
+        </span>
         <span className="subs-widget__label">
           {totalDocs === 1 ? 'subscription' : 'subscriptions'}
           <span className="subs-widget__sublabel">
@@ -45,10 +56,21 @@ export async function SubscriptionsWidget(props: WidgetServerProps) {
         <Link className="subs-widget__view-all" href={listHref} prefetch={false}>
           View all →
         </Link>
-        <Link className="subs-widget__create" href={createHref} prefetch={false}>
-          <PlusIcon />
-          New subscription
-        </Link>
+        {limitReached ? (
+          <span
+            className="subs-widget__create subs-widget__create--disabled"
+            aria-disabled="true"
+            title="Subscription limit reached — delete a subscription to add a new one"
+          >
+            <PlusIcon />
+            New subscription
+          </span>
+        ) : (
+          <Link className="subs-widget__create" href={createHref} prefetch={false}>
+            <PlusIcon />
+            New subscription
+          </Link>
+        )}
       </div>
     </div>
   )

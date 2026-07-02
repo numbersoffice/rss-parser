@@ -120,15 +120,13 @@ export default async function HomePage() {
           )}
           <p className="cta-row">
             <a className="cta" href={payloadConfig.routes.admin}>
-              [ open the dashboard → ]
+              open the dashboard →
             </a>
           </p>
         </>
       )}
 
-      <footer className="colophon">
-        made for the indie web · no tracking · powered by Payload CMS
-      </footer>
+      <footer className="colophon">no tracking · powered by Payload CMS</footer>
     </div>
   )
 }

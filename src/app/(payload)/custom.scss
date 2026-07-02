@@ -151,6 +151,49 @@ html[data-theme='dark'] {
   height: 1rem;
 }
 
+/* muted count shown next to the big number when the user has a limit */
+.subs-widget__limit {
+  font-size: 1.5rem;
+  font-weight: 400;
+  color: var(--theme-elevation-500);
+}
+
+/* create shortcut at the subscription limit: grayed out, no press effect */
+.subs-widget__create--disabled {
+  border-color: var(--theme-elevation-400);
+  color: var(--theme-elevation-400);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.subs-widget__create--disabled:hover,
+.subs-widget__create--disabled:active {
+  box-shadow: none;
+  transform: none;
+}
+
+/* quiet "7 / 12 subscriptions used" above the subscriptions list
+   (src/components/SubscriptionLimitCounter.tsx) */
+.subs-limit {
+  margin-bottom: calc(var(--base) / 2);
+  font-size: 0.85rem;
+  color: var(--theme-elevation-500);
+}
+
+/* a document tab bar with no tabs left (subscriptions: API tab off via
+   hideAPIURL, Edit tab off via its tab condition) still paints a spacer
+   (.doc-tabs:after) — collapse it entirely */
+.doc-tabs:has(.doc-tabs__tabs:empty) {
+  display: none;
+}
+
+/* subscriptions edit view: hide the "Last Modified: …" meta entry (visual
+   only — the timestamp still exists). "Created: …" stays; the selector works
+   because Last Modified is always the first meta item when editing. */
+.collection-edit--subscriptions .doc-controls__meta .doc-controls__value-wrap:first-child {
+  display: none;
+}
+
 /* text-only account link in the top-right (src/components/AccountAvatar.tsx),
    same hover behavior as the breadcrumb "Home" link */
 .account-name {

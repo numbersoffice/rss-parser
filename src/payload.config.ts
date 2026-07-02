@@ -8,6 +8,7 @@ import { FeedItems } from './collections/FeedItems'
 import { Sources } from './collections/Sources'
 import { Subscriptions } from './collections/Subscriptions'
 import { Users } from './collections/Users'
+import { Settings } from './globals/Settings'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -47,6 +48,7 @@ export default buildConfig({
     },
   },
   collections: [Subscriptions, Sources, FeedItems, Users],
+  globals: [Settings],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
