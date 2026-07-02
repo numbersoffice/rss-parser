@@ -21,9 +21,10 @@ export const Subscriptions: CollectionConfig = {
   slug: 'subscriptions',
   admin: {
     useAsTitle: 'handle',
-    defaultColumns: ['handle', 'type', 'user', 'feedUrl'],
+    defaultColumns: ['handle', 'type', 'feedUrl', 'createdAt'],
     description:
       'Your feeds. Each subscription has its own private feed URL — deleting the subscription breaks the URL.',
+    hideAPIURL: true,
   },
   access: {
     create: isLoggedIn,

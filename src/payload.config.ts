@@ -23,6 +23,7 @@ export default buildConfig({
         Logo: '/components/Wordmark#LoginLogo',
         Icon: '/components/Wordmark#NavIcon',
       },
+      providers: ['/components/RoleStyles#RoleStyles'],
       views: {
         dashboard: {
           Component: '/components/RoleDashboard#RoleDashboard',
