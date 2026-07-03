@@ -58,7 +58,7 @@ Set `OUTBOUND_PROXY_URL` in `.env` to your proxy endpoint (credentials can be em
 OUTBOUND_PROXY_URL=http://user:pass@proxy.example.com:12321
 ```
 
-When unset, fetches go out directly. Only adapter traffic uses the proxy — the app's own requests never consume proxy bandwidth. Any standard HTTP proxy works, so you can point this at whichever provider (or your own proxy) you prefer. For troubleshooting, each source records the exit IP, HTTP status, and timing of its last fetch under **Last fetch** (credentials are never stored or displayed).
+When unset, fetches go out directly. Only adapter traffic uses the proxy — the app's own requests never consume proxy bandwidth. Any standard HTTP proxy works, so you can point this at your own proxy or whichever provider you prefer. For troubleshooting, each source records the HTTP status, and timing of its last fetch under **Last fetch** (credentials are never stored or displayed).
 
 ## Architecture
 
