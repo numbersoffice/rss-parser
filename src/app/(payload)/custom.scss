@@ -302,6 +302,19 @@ html[data-theme='dark'] {
   }
 }
 
+/* Mobile Safari auto-zooms when a focused form control has a font-size below
+   16px. Keep inputs/textareas/selects and their placeholders at >=16px so
+   focusing a field never triggers that zoom. */
+input,
+textarea,
+select {
+  font-size: max(16px, 1em);
+
+  &::placeholder {
+    font-size: max(16px, 1em);
+  }
+}
+
 /* "no account yet? create one →" under the login form
    (src/components/RegisterLink.tsx, admin.components.afterLogin) */
 .register-link {
