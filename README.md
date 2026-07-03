@@ -48,6 +48,18 @@ Each subscription gets its own unguessable URL: `/feeds/{token}`. Deleting the s
 - Admins can force a fetch with `POST /api/sources/{id}/refresh`.
 - If a fetch fails (rate limit, private account, …), the error shows on the source under **Last fetch** and the feed keeps serving the previously cached items.
 
+### Routing fetches through a proxy
+
+Instagram (and similar sources) often rate-limit or block requests coming from datacenter/VPS IPs, which is where most deployments run. To work around this, outbound adapter traffic can be routed through an HTTP proxy — typically a **residential proxy**, so the source sees an ordinary consumer IP rather than a datacenter one.
+
+Set `OUTBOUND_PROXY_URL` in `.env` to your proxy endpoint (credentials can be embedded in the URL):
+
+```sh
+OUTBOUND_PROXY_URL=http://user:pass@proxy.example.com:12321
+```
+
+When unset, fetches go out directly. Only adapter traffic uses the proxy — the app's own requests never consume proxy bandwidth. Any standard HTTP proxy works, so you can point this at whichever provider (or your own proxy) you prefer. For troubleshooting, each source records the exit IP, HTTP status, and timing of its last fetch under **Last fetch** (credentials are never stored or displayed).
+
 ## Architecture
 
 ```
@@ -65,6 +77,7 @@ src/
     access.ts         role-based access helpers
     sources.ts        find-or-create dedupe + orphan garbage collection
     refresh.ts        fetch via adapter, upsert into feed-items, record status
+    proxy.ts          optional HTTP proxy for outbound adapter fetches
     rss.ts            render RSS 2.0 XML
   app/
     feeds/[token]/    per-subscription RSS endpoint
@@ -82,7 +95,7 @@ That's it — the `type` dropdown, source dedupe, caching, TTL refresh, error re
 
 ## Caveats
 
-- **The Instagram adapter uses Instagram's unofficial web API** (the same endpoint instagram.com itself uses). It needs no credentials and works for public profiles, but Instagram may rate-limit or block it — especially from datacenter/VPS IPs. Errors appear on the source; cached items keep serving. The adapter is isolated, so it can be swapped for the official Graph API or an [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge) proxy without touching anything else.
+- **The Instagram adapter uses Instagram's unofficial web API** (the same endpoint instagram.com itself uses). It needs no credentials and works for public profiles, but Instagram may rate-limit or block it — especially from datacenter/VPS IPs (see [Routing fetches through a proxy](#routing-fetches-through-a-proxy)). Errors appear on the source; cached items keep serving. The adapter is isolated, so it can be swapped for the official Graph API or an [RSS-Bridge](https://github.com/RSS-Bridge/rss-bridge) proxy without touching anything else.
 - Instagram image URLs are signed and expire after a while; older entries in your reader may lose their images. The permalink in each entry always works.
 - Feed URLs are unauthenticated by design (RSS readers can't log in) but unguessable. Treat them like private links.
 - Set `PAYLOAD_PUBLIC_SERVER_URL` in `.env` to your deployed URL so the feed URLs shown in the dashboard are correct.
