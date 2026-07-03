@@ -1,7 +1,7 @@
 import type { Payload } from 'payload'
 
 import { getAdapter } from '@/adapters/registry'
-import type { SourceAdapter } from '@/adapters/types'
+import type { NormalizedItem, SourceAdapter } from '@/adapters/types'
 import type { FeedItem, Source } from '@/payload-types'
 
 export interface RefreshResult {
@@ -26,58 +26,84 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
 
   let result: RefreshResult
   try {
-    const adapter = getAdapter(source.type)
-    const items = await adapter.fetchItems(source, debug)
-
-    for (const item of items) {
-      const existing = await payload.find({
-        collection: 'feed-items',
-        where: {
-          and: [{ source: { equals: source.id } }, { externalId: { equals: item.externalId } }],
-        },
-        limit: 1,
-        depth: 0,
-      })
-
-      const data = {
-        source: source.id,
-        externalId: item.externalId,
-        title: item.title,
-        content: item.content,
-        url: item.url,
-        imageUrl: item.imageUrl,
-        publishedAt: item.publishedAt.toISOString(),
-      }
-
-      if (existing.docs.length > 0) {
-        await payload.update({ collection: 'feed-items', id: existing.docs[0].id, data, depth: 0 })
-      } else {
-        await payload.create({ collection: 'feed-items', data, depth: 0 })
-      }
-    }
-
-    await pruneUnrefreshableItems(payload, source, adapter, items.map((item) => item.externalId))
-
+    const items = await getAdapter(source.type).fetchItems(source, debug)
+    await storeItems(payload, source, items)
     result = { status: 'success', itemCount: items.length, debug }
   } catch (err) {
     result = { status: 'error', error: describeError(err), debug }
     payload.logger.warn(`Refresh failed for source "${source.name}": ${result.error}`)
   }
 
+  await recordFetchOutcome(payload, source.id, result)
+  return result
+}
+
+/**
+ * Upsert already-fetched items into feed-items and prune ones whose images
+ * have permanently expired. Split out of {@link refreshSource} so the initial
+ * fetch that happens while a source is being created (findOrCreateVerifiedSource)
+ * can reuse the items it fetched to validate the account, without a second
+ * request.
+ */
+export async function storeItems(
+  payload: Payload,
+  source: Source,
+  items: NormalizedItem[],
+): Promise<void> {
+  for (const item of items) {
+    const existing = await payload.find({
+      collection: 'feed-items',
+      where: {
+        and: [{ source: { equals: source.id } }, { externalId: { equals: item.externalId } }],
+      },
+      limit: 1,
+      depth: 0,
+    })
+
+    const data = {
+      source: source.id,
+      externalId: item.externalId,
+      title: item.title,
+      content: item.content,
+      url: item.url,
+      imageUrl: item.imageUrl,
+      publishedAt: item.publishedAt.toISOString(),
+    }
+
+    if (existing.docs.length > 0) {
+      await payload.update({ collection: 'feed-items', id: existing.docs[0].id, data, depth: 0 })
+    } else {
+      await payload.create({ collection: 'feed-items', data, depth: 0 })
+    }
+  }
+
+  await pruneUnrefreshableItems(
+    payload,
+    source,
+    getAdapter(source.type),
+    items.map((item) => item.externalId),
+  )
+}
+
+/** Record the outcome of a fetch on the source document so it is visible in the
+ * admin dashboard (and so the source counts as fetched). */
+export async function recordFetchOutcome(
+  payload: Payload,
+  sourceId: string | number,
+  result: RefreshResult,
+): Promise<void> {
   await payload.update({
     collection: 'sources',
-    id: source.id,
+    id: sourceId,
     data: {
       lastFetchedAt: new Date().toISOString(),
       lastFetchStatus: result.status,
       lastFetchError: result.error ?? null,
-      lastFetchDebug: debug,
+      lastFetchDebug: result.debug ?? {},
     },
     depth: 0,
     context: { skipSourceRefresh: true },
   })
-
-  return result
 }
 
 /**
@@ -86,7 +112,7 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
  * sometimes nested further). Flatten the chain so the source's lastFetchError
  * shows the actionable detail: a proxy 407, ECONNREFUSED, a TLS error, etc.
  */
-function describeError(err: unknown): string {
+export function describeError(err: unknown): string {
   if (!(err instanceof Error)) return String(err)
   const parts: string[] = []
   const seen = new Set<unknown>()

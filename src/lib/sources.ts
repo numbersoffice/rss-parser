@@ -1,5 +1,8 @@
-import type { Payload, PayloadRequest } from 'payload'
+import { APIError, type Payload, type PayloadRequest } from 'payload'
 
+import { getAdapter } from '@/adapters/registry'
+import type { NormalizedItem } from '@/adapters/types'
+import { describeError, recordFetchOutcome, storeItems } from '@/lib/refresh'
 import type { Source } from '@/payload-types'
 
 export const normalizeHandle = (handle: string): string =>
@@ -17,10 +20,19 @@ export const relationId = (value: unknown): number | string | undefined => {
 
 /**
  * Sources are canonical: one per (type, handle), shared by all subscribers so
- * each account is only fetched once. Subscribing finds the existing source or
- * creates it.
+ * each account is only fetched once. Subscribing finds the existing source or,
+ * for a brand-new account, creates it.
+ *
+ * Before a new source is created the account is fetched once to confirm it
+ * exists — a mistyped/nonexistent handle (404), a private profile, or a
+ * rate-limit throws an APIError here (surfaced as an error toast in the admin)
+ * and *nothing* is written, so we never persist a source whose every fetch
+ * would fail. The items fetched during that check seed the new source, so a
+ * successful subscribe still makes only a single request. Reusing an existing
+ * shared source is fast and skips the check — it was already validated by
+ * whoever created it.
  */
-export async function findOrCreateSource(
+export async function findOrCreateVerifiedSource(
   payload: Payload,
   type: Source['type'],
   handle: string,
@@ -41,21 +53,38 @@ export async function findOrCreateSource(
   const existing = await find()
   if (existing) return existing
 
+  // Verify the account is reachable *before* writing anything. Reuse the items
+  // this returns to seed the source below, so there's no second request.
+  const debug: Record<string, unknown> = {}
+  let items: NormalizedItem[]
   try {
-    return await payload.create({
+    // The adapter only reads handle/type off the source; it isn't persisted.
+    items = await getAdapter(type).fetchItems({ type, handle: normalized } as Source, debug)
+  } catch (err) {
+    throw new APIError(describeError(err), 400)
+  }
+
+  let source: Source
+  try {
+    source = await payload.create({
       collection: 'sources',
       data: { type, handle: normalized, name: defaultSourceName(type, normalized) },
       depth: 0,
-      // The subscription's afterChange hook triggers the first fetch.
+      // We seed the items ourselves below; don't let hooks trigger a refetch.
       context: { skipSourceRefresh: true },
       req,
     })
   } catch (err) {
-    // Unique index on (type, handle): lost a creation race — reuse the winner.
+    // Unique index on (type, handle): lost a creation race — reuse the winner
+    // (already validated by whoever won).
     const winner = await find()
     if (winner) return winner
     throw err
   }
+
+  await storeItems(payload, source, items)
+  await recordFetchOutcome(payload, source.id, { status: 'success', itemCount: items.length, debug })
+  return source
 }
 
 /** Garbage-collect a source (and, via its hooks, its cached items) once the

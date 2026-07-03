@@ -13,7 +13,7 @@ import { countUserSubscriptions, getSubscriptionLimit } from '@/lib/limits'
 import { refreshSource } from '@/lib/refresh'
 import {
   deleteSourceIfOrphaned,
-  findOrCreateSource,
+  findOrCreateVerifiedSource,
   normalizeHandle,
   relationId,
 } from '@/lib/sources'
@@ -163,7 +163,9 @@ export const Subscriptions: CollectionConfig = {
         if (!type || !handle) return data // field validation reports what's missing
 
         data.handle = normalizeHandle(handle)
-        const source = await findOrCreateSource(req.payload, type, data.handle, req)
+        // Creating a source for a new account verifies it exists first; an
+        // unreachable handle throws here (error toast) and nothing is saved.
+        const source = await findOrCreateVerifiedSource(req.payload, type, data.handle, req)
         data.source = source.id
 
         const owner = relationId(data.user) ?? relationId(originalDoc?.user)
@@ -189,7 +191,8 @@ export const Subscriptions: CollectionConfig = {
     ],
     afterChange: [
       async ({ doc, previousDoc, operation, req }) => {
-        // First subscriber to a source triggers its initial fetch.
+        // New sources are fetched during creation (findOrCreateVerifiedSource),
+        // so this only covers any source that somehow still has no cache.
         const sourceId = relationId(doc.source)
         if (sourceId) {
           const source = await req.payload.findByID({
