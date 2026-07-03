@@ -28,8 +28,11 @@ export interface NormalizedItem {
 export interface SourceAdapter {
   type: string
   /** Fetch the latest items for a source. Throw on failure — the caller
-   * records the error on the source and keeps serving cached items. */
-  fetchItems(source: Source): Promise<NormalizedItem[]>
+   * records the error on the source and keeps serving cached items.
+   * Record request/response metadata (status, timing, headers) into `debug`
+   * as it becomes available — it is stored on the source for troubleshooting
+   * even when the fetch throws. */
+  fetchItems(source: Source, debug?: Record<string, unknown>): Promise<NormalizedItem[]>
   /** Link to the account/page on the source platform, used as the RSS channel link. */
   sourceUrl?(source: Source): string
   /** When the platform signs its media URLs with an expiry, return the

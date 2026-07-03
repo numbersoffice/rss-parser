@@ -104,6 +104,15 @@ export const Sources: CollectionConfig = {
           type: 'textarea',
           admin: { readOnly: true },
         },
+        {
+          name: 'lastFetchDebug',
+          type: 'json',
+          admin: {
+            readOnly: true,
+            description:
+              'Diagnostics from the last fetch: proxy/exit IP, HTTP status, timing, and any throttling headers. Useful for troubleshooting proxy and blocking issues.',
+          },
+        },
       ],
     },
   ],

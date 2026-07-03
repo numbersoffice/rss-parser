@@ -1,5 +1,6 @@
 import type { NormalizedItem, SourceAdapter } from './types'
 import type { Source } from '@/payload-types'
+import { outboundFetch, proxyEndpoint } from '@/lib/proxy'
 
 /**
  * Fetches public Instagram profiles via Instagram's own web API — the same
@@ -27,6 +28,16 @@ interface IgTimelineMedia {
 function firstLine(text: string, maxLength = 120): string {
   const line = text.split('\n')[0].trim()
   return line.length > maxLength ? `${line.slice(0, maxLength - 1)}…` : line
+}
+
+/** Snapshot a subset of response headers (those present) for the debug record. */
+function pickHeaders(headers: Headers, names: string[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const name of names) {
+    const value = headers.get(name)
+    if (value !== null) out[name] = value
+  }
+  return out
 }
 
 function escapeHtml(value: string): string {
@@ -78,14 +89,21 @@ export const instagramAdapter: SourceAdapter = {
     }
   },
 
-  async fetchItems(source: Source): Promise<NormalizedItem[]> {
+  async fetchItems(source: Source, debug: Record<string, unknown> = {}): Promise<NormalizedItem[]> {
+    const proxy = proxyEndpoint()
+    debug.proxied = proxy !== null
+    debug.proxy = proxy ?? 'direct'
+
     const username = source.handle?.trim().replace(/^@/, '')
     if (!username) {
       throw new Error('Source has no Instagram handle configured')
     }
 
     const endpoint = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`
-    const res = await fetch(endpoint, {
+    debug.endpoint = endpoint
+
+    const startedAt = Date.now()
+    const res = await outboundFetch(endpoint, {
       headers: {
         'user-agent': USER_AGENT,
         'x-ig-app-id': IG_APP_ID,
@@ -96,6 +114,18 @@ export const instagramAdapter: SourceAdapter = {
       redirect: 'follow',
       signal: AbortSignal.timeout(15_000),
     })
+    debug.durationMs = Date.now() - startedAt
+    debug.httpStatus = res.status
+    debug.contentType = res.headers.get('content-type') ?? ''
+    // Headers Instagram sets when throttling or challenging a client — the
+    // clearest signal of whether a failure is IP-level blocking vs. a bad handle.
+    debug.responseHeaders = pickHeaders(res.headers, [
+      'retry-after',
+      'x-ratelimit-remaining',
+      'www-authenticate',
+      'x-fb-rlafr',
+      'location',
+    ])
 
     if (res.status === 404) {
       throw new Error(`Instagram profile @${username} not found`)
@@ -122,6 +152,7 @@ export const instagramAdapter: SourceAdapter = {
     }
 
     const edges = user.edge_owner_to_timeline_media?.edges ?? []
+    debug.itemCount = edges.length
     return edges.map(({ node }) => toItem(node, username))
   },
 }

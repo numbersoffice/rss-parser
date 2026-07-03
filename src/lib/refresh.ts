@@ -8,6 +8,7 @@ export interface RefreshResult {
   status: 'success' | 'error'
   itemCount?: number
   error?: string
+  debug?: Record<string, unknown>
 }
 
 /**
@@ -18,10 +19,15 @@ export interface RefreshResult {
 export async function refreshSource(payload: Payload, sourceId: string | number): Promise<RefreshResult> {
   const source = (await payload.findByID({ collection: 'sources', id: sourceId })) as Source
 
+  // Collected by the adapter as it runs (proxy, response status, timing,
+  // throttling headers) and stored even when the fetch throws, so proxy and
+  // blocking issues can be diagnosed from the admin dashboard.
+  const debug: Record<string, unknown> = {}
+
   let result: RefreshResult
   try {
     const adapter = getAdapter(source.type)
-    const items = await adapter.fetchItems(source)
+    const items = await adapter.fetchItems(source, debug)
 
     for (const item of items) {
       const existing = await payload.find({
@@ -52,9 +58,9 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
 
     await pruneUnrefreshableItems(payload, source, adapter, items.map((item) => item.externalId))
 
-    result = { status: 'success', itemCount: items.length }
+    result = { status: 'success', itemCount: items.length, debug }
   } catch (err) {
-    result = { status: 'error', error: err instanceof Error ? err.message : String(err) }
+    result = { status: 'error', error: describeError(err), debug }
     payload.logger.warn(`Refresh failed for source "${source.name}": ${result.error}`)
   }
 
@@ -65,12 +71,34 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
       lastFetchedAt: new Date().toISOString(),
       lastFetchStatus: result.status,
       lastFetchError: result.error ?? null,
+      lastFetchDebug: debug,
     },
     depth: 0,
     context: { skipSourceRefresh: true },
   })
 
   return result
+}
+
+/**
+ * Node's `fetch` reports connection-level failures — including proxy errors —
+ * as a bare "fetch failed", stashing the real reason on `err.cause` (and
+ * sometimes nested further). Flatten the chain so the source's lastFetchError
+ * shows the actionable detail: a proxy 407, ECONNREFUSED, a TLS error, etc.
+ */
+function describeError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err)
+  const parts: string[] = []
+  const seen = new Set<unknown>()
+  let current: unknown = err
+  while (current instanceof Error && !seen.has(current)) {
+    seen.add(current)
+    const code = (current as { code?: string }).code
+    parts.push(code ? `${current.message} (${code})` : current.message)
+    current = (current as { cause?: unknown }).cause
+  }
+  // Drop consecutive duplicates (the top message often repeats its cause).
+  return parts.filter((part, i) => part !== parts[i - 1]).join(' — ')
 }
 
 /** Serve-time headroom: the feed response is cached for 5 minutes and readers

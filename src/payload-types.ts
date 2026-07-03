@@ -215,6 +215,18 @@ export interface Source {
   lastFetchedAt?: string | null;
   lastFetchStatus?: ('success' | 'error') | null;
   lastFetchError?: string | null;
+  /**
+   * Diagnostics from the last fetch: proxy/exit IP, HTTP status, timing, and any throttling headers. Useful for troubleshooting proxy and blocking issues.
+   */
+  lastFetchDebug?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -354,6 +366,7 @@ export interface SourcesSelect<T extends boolean = true> {
   lastFetchedAt?: T;
   lastFetchStatus?: T;
   lastFetchError?: T;
+  lastFetchDebug?: T;
   updatedAt?: T;
   createdAt?: T;
 }
