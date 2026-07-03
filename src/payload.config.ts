@@ -1,5 +1,6 @@
 import { sqliteAdapter } from '@payloadcms/db-sqlite'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
+import { nodemailerAdapter } from '@payloadcms/email-nodemailer'
 import path from 'path'
 import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
@@ -94,5 +95,22 @@ export default buildConfig({
       url: process.env.DATABASE_URL || 'file:./rss-parser.db',
     },
   }),
+  ...(process.env.SMTP_HOST
+    ? {
+        email: nodemailerAdapter({
+          defaultFromAddress: process.env.EMAIL_FROM || 'noreply@example.com',
+          defaultFromName: 'RSS Parser',
+          transportOptions: {
+            host: process.env.SMTP_HOST, // email-smtp.<region>.amazonaws.com
+            port: 587,
+            secure: false, // STARTTLS on 587
+            auth: {
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASS,
+            },
+          },
+        }),
+      }
+    : {}),
   plugins: [],
 })
