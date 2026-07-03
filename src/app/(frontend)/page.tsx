@@ -67,16 +67,18 @@ export default async function HomePage() {
         <a className="wordmark-link" href="/">
           <Wordmark />
         </a>
-        <span className="masthead-meta">self-hostable · instagram → rss</span>
+        <span className="masthead-meta">
+          <a href="https://github.com/numbersoffice/rss-parser/tree/main">github</a>
+        </span>
       </header>
 
-      <XmlHero />
+      {/* <XmlHero /> */}
 
       {!user && (
         <>
           <p>
-            This tool turns public Instagram accounts into plain feeds. Add a handle, get a feed
-            URL, paste it into your reader. No app, no algorithm, no Instagram account.
+            This tool turns <strong>public Instagram</strong> accounts into rss feeds. Add a handle,
+            get a feed URL, paste it into your reader. No app, no algorithm, no Instagram account.
           </p>
           <ul className="facts">
             <li>
@@ -84,12 +86,8 @@ export default async function HomePage() {
               API sees only one visitor.
             </li>
             <li>
-              Your feed URL is unguessable and yours alone. Delete the subscription and the URL
-              stops working.
-            </li>
-            <li>
-              Open source, SQLite DB, extensible . New platforms connectors are just one
-              adapter-file away.
+              Open source, SQLite DB, extensible. New platforms connectors are one adapter-file
+              away.
             </li>
           </ul>
           <p className="cta-row">
