@@ -11,6 +11,7 @@ import { Subscriptions } from './collections/Subscriptions'
 import { Users } from './collections/Users'
 import { Settings } from './globals/Settings'
 import { captchaEndpoint, registerEndpoint } from './lib/registration'
+import { migrations } from './migrations'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -94,6 +95,9 @@ export default buildConfig({
     client: {
       url: process.env.DATABASE_URL || 'file:./rss-parser.db',
     },
+    // Schema is only auto-pushed in dev; in production the migrations run
+    // at startup (instrumentation.ts inits Payload on boot).
+    prodMigrations: migrations,
   }),
   ...(process.env.SMTP_HOST
     ? {
