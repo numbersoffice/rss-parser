@@ -40,48 +40,21 @@ export async function renderOgImage() {
           color: ink,
           fontFamily: 'JetBrains Mono',
           fontSize: 27,
-          padding: 60,
+          padding: 70,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', fontSize: 56, fontWeight: 700 }}>
+        <span style={{ color: muted, fontSize: 28 }}>self-hostable · instagram → rss</span>
+
+        {/* the terminal wordmark, front and center — the landing page's mark */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', fontSize: 104, fontWeight: 700 }}>
             <span style={{ color: muted, fontWeight: 400 }}>~/</span>
             <span>rss-parser</span>
+            <span style={{ color: accent, marginLeft: 12 }}>▊</span>
           </div>
-          <span style={{ color: muted, fontSize: 28 }}>self-hostable · instagram → rss</span>
-        </div>
-
-        {/* the XML hero from the landing page */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignSelf: 'flex-start',
-            border: `2px solid ${ink}`,
-            boxShadow: `14px 14px 0 ${accent}`,
-            padding: '36px 48px',
-            lineHeight: 1.6,
-          }}
-        >
-          <span style={{ color: muted }}>{'<?xml version="1.0" encoding="UTF-8"?>'}</span>
-          <span style={{ color: accent }}>{'<rss version="2.0">'}</span>
-          <div style={{ display: 'flex', marginLeft: 38 }}>
-            <span style={{ color: accent }}>{'<title>'}</span>
-            <span style={{ fontWeight: 700 }}>rss-parser</span>
-            <span style={{ color: accent }}>{'</title>'}</span>
-          </div>
-          <div style={{ display: 'flex', marginLeft: 38 }}>
-            <span style={{ color: accent }}>{'<description>'}</span>
-            <span style={{ fontWeight: 700 }}>Follow Instagram accounts</span>
-          </div>
-          <div style={{ display: 'flex', marginLeft: 76 }}>
-            <span style={{ fontWeight: 700 }}>from your RSS reader.</span>
-          </div>
-          <div style={{ display: 'flex', marginLeft: 38, color: accent }}>{'</description>'}</div>
-          <div style={{ display: 'flex', color: accent }}>
-            {'</rss>'}
-            <span style={{ marginLeft: 8 }}>▊</span>
-          </div>
+          <span style={{ fontSize: 40, marginTop: 28 }}>
+            Follow Instagram accounts from your RSS reader.
+          </span>
         </div>
 
         <span style={{ color: muted, fontSize: 24 }}>no tracking · powered by Payload CMS</span>
