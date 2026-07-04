@@ -1,16 +1,19 @@
 import { sqliteAdapter } from '@payloadcms/db-sqlite'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { nodemailerAdapter } from '@payloadcms/email-nodemailer'
+import { s3Storage } from '@payloadcms/storage-s3'
 import path from 'path'
 import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 
 import { FeedItems } from './collections/FeedItems'
+import { Media } from './collections/Media'
 import { Sources } from './collections/Sources'
 import { Subscriptions } from './collections/Subscriptions'
 import { Users } from './collections/Users'
 import { Settings } from './globals/Settings'
 import { captchaEndpoint, registerEndpoint } from './lib/registration'
+import { publicS3Url, s3Enabled } from './lib/s3'
 import { migrations } from './migrations'
 
 const filename = fileURLToPath(import.meta.url)
@@ -83,7 +86,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Subscriptions, Sources, FeedItems, Users],
+  collections: [Subscriptions, Sources, FeedItems, Media, Users],
   endpoints: [captchaEndpoint, registerEndpoint],
   globals: [Settings],
   editor: lexicalEditor(),
@@ -116,5 +119,32 @@ export default buildConfig({
         }),
       }
     : {}),
-  plugins: [],
+  // Feed item images are mirrored into an S3-compatible bucket (Hetzner Object
+  // Storage) so feeds serve stable public URLs instead of the platform's
+  // signed, origin-restricted CDN URLs. Without the env vars (local dev) the
+  // plugin is skipped and the raw CDN URLs are served instead.
+  plugins: s3Enabled()
+    ? [
+        s3Storage({
+          collections: {
+            media: {
+              // Files are read straight from the public bucket, never proxied
+              // through Payload — the whole point is client-reachable URLs.
+              disablePayloadAccessControl: true,
+              generateFileURL: ({ filename }) => publicS3Url(filename),
+            },
+          },
+          bucket: process.env.S3_BUCKET!,
+          config: {
+            endpoint: process.env.S3_ENDPOINT,
+            region: process.env.S3_REGION || 'auto',
+            credentials: {
+              accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+              secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+            },
+            forcePathStyle: true,
+          },
+        }),
+      ]
+    : [],
 })

@@ -1,5 +1,6 @@
 import type { NormalizedItem, SourceAdapter } from './types'
 import type { Source } from '@/payload-types'
+import { escapeHtml } from '@/lib/html'
 import { outboundFetch, proxyEndpoint } from '@/lib/proxy'
 
 /**
@@ -40,14 +41,6 @@ function pickHeaders(headers: Headers, names: string[]): Record<string, string> 
   return out
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-}
-
 function toItem(media: IgTimelineMedia, username: string): NormalizedItem {
   const caption = media.edge_media_to_caption?.edges?.[0]?.node?.text ?? ''
   const url = `https://www.instagram.com/p/${media.shortcode}/`
@@ -75,18 +68,6 @@ export const instagramAdapter: SourceAdapter = {
 
   sourceUrl(source: Source): string {
     return `https://www.instagram.com/${(source.handle ?? '').trim().replace(/^@/, '')}/`
-  },
-
-  // Instagram CDN URLs are signed; the `oe` query param is the expiry as a
-  // hex-encoded unix timestamp. After it passes, the CDN serves a 403.
-  imageUrlExpiresAt(imageUrl: string): Date | null {
-    try {
-      const oe = new URL(imageUrl).searchParams.get('oe')
-      if (!oe || !/^[0-9A-Fa-f]{1,12}$/.test(oe)) return null
-      return new Date(parseInt(oe, 16) * 1000)
-    } catch {
-      return null
-    }
   },
 
   async fetchItems(source: Source, debug: Record<string, unknown> = {}): Promise<NormalizedItem[]> {

@@ -1,7 +1,11 @@
 import type { Payload } from 'payload'
 
 import { getAdapter } from '@/adapters/registry'
-import type { NormalizedItem, SourceAdapter } from '@/adapters/types'
+import type { NormalizedItem } from '@/adapters/types'
+import { escapeHtml } from '@/lib/html'
+import { outboundFetch } from '@/lib/proxy'
+import { relationId } from '@/lib/relations'
+import { isPublicS3Url, publicS3Url, s3Enabled } from '@/lib/s3'
 import type { FeedItem, Source } from '@/payload-types'
 
 export interface RefreshResult {
@@ -39,11 +43,11 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
 }
 
 /**
- * Upsert already-fetched items into feed-items and prune ones whose images
- * have permanently expired. Split out of {@link refreshSource} so the initial
- * fetch that happens while a source is being created (findOrCreateVerifiedSource)
- * can reuse the items it fetched to validate the account, without a second
- * request.
+ * Upsert already-fetched items into feed-items, mirroring each item's image
+ * into our own bucket so feeds serve stable public URLs (see resolveImage).
+ * Split out of {@link refreshSource} so the initial fetch that happens while
+ * a source is being created (findOrCreateVerifiedSource) can reuse the items
+ * it fetched to validate the account, without a second request.
  */
 export async function storeItems(
   payload: Payload,
@@ -60,13 +64,15 @@ export async function storeItems(
       depth: 0,
     })
 
+    const image = await resolveImage(payload, source, item, existing.docs[0])
     const data = {
       source: source.id,
       externalId: item.externalId,
       title: item.title,
-      content: item.content,
+      content: image.content,
       url: item.url,
-      imageUrl: item.imageUrl,
+      imageUrl: image.imageUrl,
+      image: image.image,
       publishedAt: item.publishedAt.toISOString(),
     }
 
@@ -76,13 +82,87 @@ export async function storeItems(
       await payload.create({ collection: 'feed-items', data, depth: 0 })
     }
   }
+}
 
-  await pruneUnrefreshableItems(
-    payload,
-    source,
-    getAdapter(source.type),
-    items.map((item) => item.externalId),
-  )
+interface ResolvedImage {
+  imageUrl: string | null
+  image: number | null
+  content: string
+}
+
+/**
+ * Decide what image a feed item should serve. Platform image URLs (Instagram
+ * CDN) are signed, expire after a few days, and are origin-restricted so not
+ * every feed reader can load them — so the first time we see a post we
+ * download its image once (a dozen posts × ~200 KB, negligible even on the
+ * metered proxy) and store it in our public bucket, then serve that stable
+ * URL in `imageUrl` and inside the content HTML.
+ *
+ * On download/upload failure the item is stored with the raw CDN URL and no
+ * stored image — feeds never lose a post over image trouble — and because
+ * the stored URL is then not a bucket URL, the next refresh retries. That
+ * same property backfills items that predate image mirroring.
+ */
+async function resolveImage(
+  payload: Payload,
+  source: Source,
+  item: NormalizedItem,
+  existing: FeedItem | undefined,
+): Promise<ResolvedImage> {
+  const existingImageId = relationId(existing?.image)
+  const existingImage = typeof existingImageId === 'number' ? existingImageId : null
+  if (!item.imageUrl || !s3Enabled()) {
+    return { imageUrl: item.imageUrl ?? null, image: existingImage, content: item.content }
+  }
+
+  // Already mirrored: keep the stored copy, but still swap the fresh signed
+  // CDN URL the adapter embedded in this fetch's content for the bucket URL.
+  if (existingImage && existing?.imageUrl && isPublicS3Url(existing.imageUrl)) {
+    return {
+      imageUrl: existing.imageUrl,
+      image: existingImage,
+      content: rewriteImageUrl(item.content, item.imageUrl, existing.imageUrl),
+    }
+  }
+
+  try {
+    const res = await outboundFetch(item.imageUrl, { signal: AbortSignal.timeout(20_000) })
+    if (!res.ok) {
+      throw new Error(`image request returned ${res.status}`)
+    }
+    const bytes = Buffer.from(await res.arrayBuffer())
+    const mimetype = res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg'
+    const media = await payload.create({
+      collection: 'media',
+      data: {},
+      file: {
+        data: bytes,
+        mimetype,
+        name: `${source.id}-${item.externalId}.jpg`,
+        size: bytes.byteLength,
+      },
+      depth: 0,
+    })
+    // Read the URL off the created doc, not the requested name — Payload
+    // suffixes filename collisions.
+    const publicUrl = media.url ?? publicS3Url(media.filename ?? '')
+    return {
+      imageUrl: publicUrl,
+      image: media.id,
+      content: rewriteImageUrl(item.content, item.imageUrl, publicUrl),
+    }
+  } catch (err) {
+    payload.logger.warn(
+      `Could not mirror image for "${item.title}" (source "${source.name}"): ${describeError(err)}`,
+    )
+    return { imageUrl: item.imageUrl, image: existingImage, content: item.content }
+  }
+}
+
+/** Swap an image URL inside content HTML. Adapters embed URLs HTML-escaped
+ * (via the same escapeHtml), so replace that form as well as the raw one. */
+function rewriteImageUrl(content: string, from: string, to: string): string {
+  return content.replaceAll(escapeHtml(from), escapeHtml(to)).replaceAll(from, to)
 }
 
 /** Record the outcome of a fetch on the source document so it is visible in the
@@ -127,89 +207,17 @@ export function describeError(err: unknown): string {
   return parts.filter((part, i) => part !== parts[i - 1]).join(' — ')
 }
 
-/** Serve-time headroom: the feed response is cached for 5 minutes and readers
- * fetch images some time after the feed, so treat images expiring within the
- * next 15 minutes as already expired. */
-const IMAGE_EXPIRY_BUFFER_MS = 15 * 60_000
-
-/** If a refresh fails, expired items stay cached and would trigger a refresh
- * on every feed request. Cap expiry-triggered refreshes to once per this
- * interval. */
-const MIN_EXPIRY_REFRESH_INTERVAL_MS = 10 * 60_000
-
 /**
- * Delete cached items whose signed image URL has expired and whose post no
- * longer appears in the platform's response — the platform will never hand
- * out a fresh URL for them, so the image is permanently dead.
+ * Refresh if the last fetch is older than the source's TTL. Returns true if
+ * a refresh ran so the caller can re-read source and items.
  */
-async function pruneUnrefreshableItems(
-  payload: Payload,
-  source: Source,
-  adapter: SourceAdapter,
-  fetchedExternalIds: string[],
-): Promise<void> {
-  if (!adapter.imageUrlExpiresAt) return
-
-  const cached = await payload.find({
-    collection: 'feed-items',
-    where: { source: { equals: source.id } },
-    pagination: false,
-    depth: 0,
-  })
-
-  const stillRefreshable = new Set(fetchedExternalIds)
-  const cutoff = Date.now() + IMAGE_EXPIRY_BUFFER_MS
-  for (const item of cached.docs) {
-    if (stillRefreshable.has(item.externalId) || !item.imageUrl) continue
-    const expiry = adapter.imageUrlExpiresAt(item.imageUrl)
-    if (expiry === null || expiry.getTime() >= cutoff) continue
-
-    await payload.delete({ collection: 'feed-items', id: item.id, depth: 0 })
-    payload.logger.info(
-      `Pruned feed item "${item.title}" from source "${source.name}" — image URL expired and post no longer refreshable`,
-    )
-  }
-}
-
-/**
- * Refresh if the cached items are older than the source's TTL, or if any
- * cached item's signed image URL has expired (Instagram media URLs only
- * live a few days, shorter than a feed item's lifetime). Returns true if a
- * refresh ran so the caller can re-read source and items.
- */
-export async function refreshSourceIfNeeded(
-  payload: Payload,
-  source: Source,
-  items: FeedItem[],
-): Promise<boolean> {
+export async function refreshSourceIfNeeded(payload: Payload, source: Source): Promise<boolean> {
   const ttlMs = (source.refreshIntervalMinutes ?? 60) * 60_000
   const sinceLastFetch = Date.now() - (source.lastFetchedAt ? new Date(source.lastFetchedAt).getTime() : 0)
-
-  const stale = sinceLastFetch > ttlMs
-  const expiredImages =
-    sinceLastFetch > MIN_EXPIRY_REFRESH_INTERVAL_MS && hasExpiredImage(source.type, items)
-  if (!stale && !expiredImages) {
+  if (sinceLastFetch <= ttlMs) {
     return false
   }
 
   await refreshSource(payload, source.id)
   return true
-}
-
-function hasExpiredImage(sourceType: string, items: FeedItem[]): boolean {
-  let expiresAt: (imageUrl: string) => Date | null
-  try {
-    const adapter = getAdapter(sourceType)
-    if (!adapter.imageUrlExpiresAt) return false
-    expiresAt = adapter.imageUrlExpiresAt.bind(adapter)
-  } catch {
-    return false
-  }
-
-  const cutoff = Date.now() + IMAGE_EXPIRY_BUFFER_MS
-  return items.some((item) => {
-    if (!item.imageUrl) return false
-    const expiry = expiresAt(item.imageUrl)
-    return expiry !== null && expiry.getTime() < cutoff
-  })
 }

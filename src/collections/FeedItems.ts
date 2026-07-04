@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { hiddenFromNonAdmins, isAdmin } from '@/lib/access'
+import { relationId } from '@/lib/relations'
 
 /**
  * Normalized cache of fetched posts. Populated by the refresh logic
@@ -19,6 +20,24 @@ export const FeedItems: CollectionConfig = {
     hidden: hiddenFromNonAdmins,
     defaultColumns: ['title', 'source', 'publishedAt'],
     description: 'Fetched posts, kept in sync automatically — no need to edit these',
+  },
+  hooks: {
+    // Also fires per-doc for the bulk delete in Sources.beforeDelete, so a
+    // source's stored images are cleaned up when it is garbage-collected.
+    // Never fail the item deletion over S3 trouble (e.g. rotated credentials).
+    afterDelete: [
+      async ({ doc, req }) => {
+        const mediaId = relationId(doc.image)
+        if (!mediaId) return
+        try {
+          await req.payload.delete({ collection: 'media', id: mediaId, depth: 0, req })
+        } catch (err) {
+          req.payload.logger.warn(
+            `Failed to delete stored image ${mediaId} for feed item ${doc.id}: ${err instanceof Error ? err.message : String(err)}`,
+          )
+        }
+      },
+    ],
   },
   indexes: [
     {
@@ -63,6 +82,13 @@ export const FeedItems: CollectionConfig = {
     {
       name: 'imageUrl',
       type: 'text',
+      admin: { description: 'URL served in the feed — the stored copy when one exists, otherwise the platform CDN' },
+    },
+    {
+      name: 'image',
+      type: 'upload',
+      relationTo: 'media',
+      admin: { description: 'Stored copy of the post image; imageUrl serves its public URL' },
     },
     {
       name: 'publishedAt',

@@ -12,6 +12,8 @@ export interface NormalizedItem {
   content: string
   /** Permalink to the original post. */
   url: string
+  /** The platform's own image URL (may be signed/expiring); the refresh
+   * logic mirrors it into our bucket when S3 storage is configured. */
   imageUrl?: string
   publishedAt: Date
 }
@@ -35,8 +37,4 @@ export interface SourceAdapter {
   fetchItems(source: Source, debug?: Record<string, unknown>): Promise<NormalizedItem[]>
   /** Link to the account/page on the source platform, used as the RSS channel link. */
   sourceUrl?(source: Source): string
-  /** When the platform signs its media URLs with an expiry, return the
-   * expiry of the given image URL so cached items can be refreshed before
-   * their images go dead. Return null if it cannot be determined. */
-  imageUrlExpiresAt?(imageUrl: string): Date | null
 }
