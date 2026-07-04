@@ -1,8 +1,10 @@
+import { after } from 'next/server'
 import { APIError, type Payload, type PayloadRequest } from 'payload'
 
 import { getAdapter } from '@/adapters/registry'
 import type { NormalizedItem } from '@/adapters/types'
 import { describeError, recordFetchOutcome, storeItems } from '@/lib/refresh'
+import { s3Enabled } from '@/lib/s3'
 import type { Source } from '@/payload-types'
 
 export const normalizeHandle = (handle: string): string =>
@@ -75,8 +77,26 @@ export async function findOrCreateVerifiedSource(
     throw err
   }
 
-  await storeItems(payload, source, items)
+  // Seed the items fast — skip the (slow) per-image download+upload so the
+  // subscribe request returns promptly. When S3 is on, a background job mirrors
+  // the images out of band; the items serve their CDN URLs until then.
+  await storeItems(payload, source, items, { mirrorImages: false })
   await recordFetchOutcome(payload, source.id, { status: 'success', itemCount: items.length, debug })
+
+  if (s3Enabled()) {
+    // Durable enqueue, then kick the queue right after the response flushes so
+    // mirroring happens within moments without blocking the save. If `after()`
+    // isn't usable here the job still persists and drains on the next feed read.
+    await payload.jobs.queue({ task: 'mirrorSourceImages', input: { sourceId: source.id } })
+    try {
+      after(async () => {
+        await payload.jobs.run({ limit: 5 }).catch(() => {})
+      })
+    } catch {
+      // Not in a request context that supports after() — leave it for the drain.
+    }
+  }
+
   return source
 }
 

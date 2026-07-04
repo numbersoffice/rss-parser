@@ -1,4 +1,5 @@
 import config from '@payload-config'
+import { after } from 'next/server'
 import { getPayload } from 'payload'
 
 import { refreshSourceIfNeeded } from '@/lib/refresh'
@@ -54,6 +55,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 
   const feedUrl = new URL(`/feeds/${token}`, request.url).toString()
   const xml = buildRssXml(source, items.docs, feedUrl)
+
+  // Backstop: drain any background jobs (e.g. image mirroring queued at
+  // subscribe time) whose prompt kick didn't complete. Runs after the response.
+  after(async () => {
+    await payload.jobs.run({ limit: 5 }).catch(() => {})
+  })
 
   return new Response(xml, {
     headers: {

@@ -53,7 +53,9 @@ export async function storeItems(
   payload: Payload,
   source: Source,
   items: NormalizedItem[],
+  opts: { mirrorImages?: boolean } = {},
 ): Promise<void> {
+  const { mirrorImages = true } = opts
   for (const item of items) {
     const existing = await payload.find({
       collection: 'feed-items',
@@ -64,7 +66,7 @@ export async function storeItems(
       depth: 0,
     })
 
-    const image = await resolveImage(payload, source, item, existing.docs[0])
+    const image = await resolveImage(payload, source, item, existing.docs[0], mirrorImages)
     const data = {
       source: source.id,
       externalId: item.externalId,
@@ -108,10 +110,15 @@ async function resolveImage(
   source: Source,
   item: NormalizedItem,
   existing: FeedItem | undefined,
+  mirrorImages: boolean,
 ): Promise<ResolvedImage> {
   const existingImageId = relationId(existing?.image)
   const existingImage = typeof existingImageId === 'number' ? existingImageId : null
-  if (!item.imageUrl || !s3Enabled()) {
+  // No image, S3 off, or the caller deferred mirroring (e.g. subscribe seeds
+  // items fast and a background job mirrors them) — store the raw CDN URL. The
+  // stored URL is then not a bucket URL, so the next refresh (or the job) still
+  // mirrors it.
+  if (!item.imageUrl || !s3Enabled() || !mirrorImages) {
     return { imageUrl: item.imageUrl ?? null, image: existingImage, content: item.content }
   }
 
@@ -126,36 +133,55 @@ async function resolveImage(
   }
 
   try {
-    const res = await outboundFetch(item.imageUrl, { signal: AbortSignal.timeout(20_000) })
-    if (!res.ok) {
-      throw new Error(`image request returned ${res.status}`)
-    }
-    const bytes = Buffer.from(await res.arrayBuffer())
-    const mimetype = res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg'
-    const media = await payload.create({
-      collection: 'media',
-      data: {},
-      file: {
-        data: bytes,
-        mimetype,
-        name: `${source.id}-${item.externalId}.jpg`,
-        size: bytes.byteLength,
-      },
-      depth: 0,
+    return await mirrorImageUrl(payload, source, {
+      imageUrl: item.imageUrl,
+      externalId: item.externalId,
+      content: item.content,
     })
-    // Read the URL off the created doc, not the requested name — Payload
-    // suffixes filename collisions.
-    const publicUrl = media.url ?? publicS3Url(media.filename ?? '')
-    return {
-      imageUrl: publicUrl,
-      image: media.id,
-      content: rewriteImageUrl(item.content, item.imageUrl, publicUrl),
-    }
   } catch (err) {
     payload.logger.warn(
       `Could not mirror image for "${item.title}" (source "${source.name}"): ${describeError(err)}`,
     )
     return { imageUrl: item.imageUrl, image: existingImage, content: item.content }
+  }
+}
+
+/**
+ * Download a platform image, store it in our public bucket, and return the
+ * bucket URL plus the content HTML rewritten to point at it. Throws on
+ * download/upload failure so callers can decide how to degrade. Shared by the
+ * live refresh path ({@link resolveImage}) and the background mirror job, which
+ * mirrors items that were seeded fast (without images) during subscribe.
+ */
+export async function mirrorImageUrl(
+  payload: Payload,
+  source: Source,
+  item: { imageUrl: string; externalId: string; content: string },
+): Promise<{ imageUrl: string; image: number; content: string }> {
+  const res = await outboundFetch(item.imageUrl, { signal: AbortSignal.timeout(20_000) })
+  if (!res.ok) {
+    throw new Error(`image request returned ${res.status}`)
+  }
+  const bytes = Buffer.from(await res.arrayBuffer())
+  const mimetype = res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg'
+  const media = await payload.create({
+    collection: 'media',
+    data: {},
+    file: {
+      data: bytes,
+      mimetype,
+      name: `${source.id}-${item.externalId}.jpg`,
+      size: bytes.byteLength,
+    },
+    depth: 0,
+  })
+  // Read the URL off the created doc, not the requested name — Payload
+  // suffixes filename collisions.
+  const publicUrl = media.url ?? publicS3Url(media.filename ?? '')
+  return {
+    imageUrl: publicUrl,
+    image: media.id,
+    content: rewriteImageUrl(item.content, item.imageUrl, publicUrl),
   }
 }
 

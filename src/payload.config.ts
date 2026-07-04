@@ -12,6 +12,7 @@ import { Sources } from './collections/Sources'
 import { Subscriptions } from './collections/Subscriptions'
 import { Users } from './collections/Users'
 import { Settings } from './globals/Settings'
+import { mirrorSourceImagesTask } from './lib/jobs/mirrorSourceImages'
 import { captchaEndpoint, registerEndpoint } from './lib/registration'
 import { publicS3Url, s3Enabled } from './lib/s3'
 import { migrations } from './migrations'
@@ -89,6 +90,16 @@ export default buildConfig({
   collections: [Subscriptions, Sources, FeedItems, Media, Users],
   endpoints: [captchaEndpoint, registerEndpoint],
   globals: [Settings],
+  // Background jobs. Mirroring a new source's images to S3 is deferred off the
+  // subscribe request into `mirrorSourceImages`, enqueued and kicked off (via
+  // Next `after()`) so saves return fast. There's no cron: jobs are run promptly
+  // on enqueue and drained again on feed reads as a backstop.
+  jobs: {
+    tasks: [mirrorSourceImagesTask],
+    // Runs are triggered in-process (never via the public HTTP endpoint), so
+    // lock the endpoint down.
+    access: { run: () => false },
+  },
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
