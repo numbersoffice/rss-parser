@@ -52,13 +52,15 @@ Each subscription gets its own unguessable URL: `/feeds/{token}`. Deleting the s
 
 Instagram (and similar sources) often rate-limit or block requests coming from datacenter/VPS IPs, which is where most deployments run. To work around this, outbound adapter traffic can be routed through an HTTP proxy — typically a **residential proxy**, so the source sees an ordinary consumer IP rather than a datacenter one.
 
-Set `OUTBOUND_PROXY_URL` in `.env` to your proxy endpoint (credentials can be embedded in the URL):
+Set `OUTBOUND_PROXY_URL` in `.env` to your proxy endpoint (credentials can be embedded in the URL). The default is [Decodo](https://decodo.com) residential, where targeting and session parameters are carried in the username:
 
 ```sh
-OUTBOUND_PROXY_URL=http://user:pass@proxy.example.com:12321
+OUTBOUND_PROXY_URL=http://user-<DECODO_USERNAME>-country-us-session-{session}:<DECODO_PASSWORD>@gate.decodo.com:7000
 ```
 
-When unset, fetches go out directly. Only adapter traffic uses the proxy — the app's own requests never consume proxy bandwidth. Any standard HTTP proxy works, so you can point this at your own proxy or whichever provider you prefer. For troubleshooting, each source records the HTTP status, and timing of its last fetch under **Last fetch** (credentials are never stored or displayed).
+**Sticky sessions.** The Instagram adapter primes a logged-out guest session (cookies + CSRF token) and then makes the profile request, and the two must leave from the same IP. Include the literal token `{session}` anywhere in the URL and it is replaced with a fresh id per fetch, so both calls share one exit IP while different fetches still rotate. With no `{session}` token the proxy just rotates per request — the placeholder works with any session-capable HTTP proxy.
+
+When unset, fetches go out directly. Only adapter traffic uses the proxy — the app's own requests never consume proxy bandwidth. For troubleshooting, each source records the HTTP status and timing of its last fetch (plus whether the guest-session prime succeeded) under **Last fetch** (credentials are never stored or displayed).
 
 ## Architecture
 
