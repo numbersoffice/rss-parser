@@ -70,6 +70,7 @@ export interface Config {
     subscriptions: Subscription;
     sources: Source;
     'feed-items': FeedItem;
+    media: Media;
     users: User;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -81,6 +82,7 @@ export interface Config {
     subscriptions: SubscriptionsSelect<false> | SubscriptionsSelect<true>;
     sources: SourcesSelect<false> | SourcesSelect<true>;
     'feed-items': FeedItemsSelect<false> | FeedItemsSelect<true>;
+    media: MediaSelect<false> | MediaSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -252,10 +254,35 @@ export interface FeedItem {
    * Permalink to the original post
    */
   url: string;
+  /**
+   * URL served in the feed — the stored copy when one exists, otherwise the platform CDN
+   */
   imageUrl?: string | null;
+  /**
+   * Stored copy of the post image; imageUrl serves its public URL
+   */
+  image?: (number | null) | Media;
   publishedAt: string;
   updatedAt: string;
   createdAt: string;
+}
+/**
+ * Stored copies of feed item images, kept in sync automatically — no need to edit these
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media".
+ */
+export interface Media {
+  id: number;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -292,6 +319,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'feed-items';
         value: number | FeedItem;
+      } | null)
+    | ({
+        relationTo: 'media';
+        value: number | Media;
       } | null)
     | ({
         relationTo: 'users';
@@ -381,9 +412,25 @@ export interface FeedItemsSelect<T extends boolean = true> {
   content?: T;
   url?: T;
   imageUrl?: T;
+  image?: T;
   publishedAt?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media_select".
+ */
+export interface MediaSelect<T extends boolean = true> {
+  updatedAt?: T;
+  createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

@@ -11,13 +11,6 @@ export const normalizeHandle = (handle: string): string =>
 export const defaultSourceName = (type: string, handle: string): string =>
   `@${normalizeHandle(handle)} (${type})`
 
-/** Payload relationship values are ids at depth 0 and docs at depth 1+. */
-export const relationId = (value: unknown): number | string | undefined => {
-  if (value == null) return undefined
-  if (typeof value === 'object') return (value as { id?: number | string }).id
-  return value as number | string
-}
-
 /**
  * Sources are canonical: one per (type, handle), shared by all subscribers so
  * each account is only fetched once. Subscribing finds the existing source or,
