@@ -11,11 +11,11 @@ import {
 } from '@/lib/access'
 import { countUserSubscriptions, getSubscriptionLimit } from '@/lib/limits'
 import { refreshSource } from '@/lib/refresh'
+import { relationId } from '@/lib/relations'
 import {
   deleteSourceIfOrphaned,
   findOrCreateVerifiedSource,
   normalizeHandle,
-  relationId,
 } from '@/lib/sources'
 
 /**
