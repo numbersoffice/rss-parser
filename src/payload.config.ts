@@ -122,29 +122,34 @@ export default buildConfig({
   // Feed item images are mirrored into an S3-compatible bucket (Hetzner Object
   // Storage) so feeds serve stable public URLs instead of the platform's
   // signed, origin-restricted CDN URLs. Without the env vars (local dev) the
-  // plugin is skipped and the raw CDN URLs are served instead.
-  plugins: s3Enabled()
-    ? [
-        s3Storage({
-          collections: {
-            media: {
-              // Files are read straight from the public bucket, never proxied
-              // through Payload — the whole point is client-reachable URLs.
-              disablePayloadAccessControl: true,
-              generateFileURL: ({ filename }) => publicS3Url(filename),
-            },
-          },
-          bucket: process.env.S3_BUCKET!,
-          config: {
-            endpoint: process.env.S3_ENDPOINT,
-            region: process.env.S3_REGION || 'auto',
-            credentials: {
-              accessKeyId: process.env.S3_ACCESS_KEY_ID!,
-              secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
-            },
-            forcePathStyle: true,
-          },
-        }),
-      ]
-    : [],
+  // plugin is inert and the raw CDN URLs are served instead. It must be
+  // registered even then — it always contributes its client component to the
+  // admin importMap, and `generate:importmap` runs without the S3 env vars,
+  // so gating the registration itself would ship an importMap that is missing
+  // the component wherever the env vars *are* set.
+  plugins: [
+    s3Storage({
+      enabled: s3Enabled(),
+      collections: {
+        media: {
+          // Files are read straight from the public bucket, never proxied
+          // through Payload — the whole point is client-reachable URLs.
+          disablePayloadAccessControl: true,
+          generateFileURL: ({ filename }) => publicS3Url(filename),
+        },
+      },
+      // Fallbacks only satisfy the types: when disabled the plugin never
+      // constructs an S3 client, so the values go unused.
+      bucket: process.env.S3_BUCKET ?? '',
+      config: {
+        endpoint: process.env.S3_ENDPOINT,
+        region: process.env.S3_REGION || 'auto',
+        credentials: {
+          accessKeyId: process.env.S3_ACCESS_KEY_ID ?? '',
+          secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? '',
+        },
+        forcePathStyle: true,
+      },
+    }),
+  ],
 })
