@@ -2,8 +2,8 @@ import { after } from 'next/server'
 import { APIError, type Payload, type PayloadRequest } from 'payload'
 
 import { getAdapter } from '@/adapters/registry'
-import type { NormalizedItem } from '@/adapters/types'
-import { describeError, recordFetchOutcome, storeItems } from '@/lib/refresh'
+import type { NormalizedFeed } from '@/adapters/types'
+import { describeError, recordFetchOutcome, resolveProfileImage, storeItems } from '@/lib/refresh'
 import { s3Enabled } from '@/lib/s3'
 import type { Source } from '@/payload-types'
 
@@ -51,13 +51,14 @@ export async function findOrCreateVerifiedSource(
   // Verify the account is reachable *before* writing anything. Reuse the items
   // this returns to seed the source below, so there's no second request.
   const debug: Record<string, unknown> = {}
-  let items: NormalizedItem[]
+  let feed: NormalizedFeed
   try {
     // The adapter only reads handle/type off the source; it isn't persisted.
-    items = await getAdapter(type).fetchItems({ type, handle: normalized } as Source, debug)
+    feed = await getAdapter(type).fetchItems({ type, handle: normalized } as Source, debug)
   } catch (err) {
     throw new APIError(describeError(err), 400)
   }
+  const items = feed.items
 
   let source: Source
   try {
@@ -81,7 +82,16 @@ export async function findOrCreateVerifiedSource(
   // subscribe request returns promptly. When S3 is on, a background job mirrors
   // the images out of band; the items serve their CDN URLs until then.
   await storeItems(payload, source, items, { mirrorImages: false })
-  await recordFetchOutcome(payload, source.id, { status: 'success', itemCount: items.length, debug })
+  // Seed the raw CDN profile URL (mirror: false — no download here); the
+  // mirrorSourceImages job swaps it for a bucket URL out of band, like it does
+  // for the item images.
+  const profileFields = await resolveProfileImage(payload, source, feed.profile?.imageUrl, false)
+  await recordFetchOutcome(
+    payload,
+    source.id,
+    { status: 'success', itemCount: items.length, debug },
+    profileFields,
+  )
 
   if (s3Enabled()) {
     // Durable enqueue, then kick the queue right after the response flushes so
