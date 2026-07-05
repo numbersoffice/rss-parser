@@ -86,8 +86,7 @@ export default async function HomePage() {
               API sees only one visitor.
             </li>
             <li>
-              Open source, SQLite DB, extensible. New platforms connectors are one adapter-file
-              away.
+              Open source, SQLite DB, extensible. New platform connectors are one adapter-file away.
             </li>
           </ul>
           <p className="cta-row">
@@ -129,7 +128,10 @@ export default async function HomePage() {
         </>
       )}
 
-      <footer className="colophon">no tracking · powered by Payload CMS</footer>
+      <footer className="colophon">
+        built by <a href="https://www.numbersoffice.com">Numbers Office</a> · no tracking · powered
+        by Payload CMS
+      </footer>
     </div>
   )
 }
