@@ -16,7 +16,7 @@ const MAX_ITEMS = 50
  * TTL no matter how many subscribers poll; on fetch failure the previously
  * cached items keep serving.
  */
-export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   const payload = await getPayload({ config })
 
@@ -53,7 +53,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     depth: 0,
   })
 
-  const feedUrl = new URL(`/feeds/${token}`, request.url).toString()
+  // Behind a reverse proxy (e.g. Docker/Coolify) request.url is the internal
+  // container address, so derive the public feed URL from the configured base.
+  const baseUrl = process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000'
+  const feedUrl = new URL(`/feeds/${token}`, baseUrl).toString()
   const xml = buildRssXml(source, items.docs, feedUrl)
 
   // Backstop: drain any background jobs (e.g. image mirroring queued at
