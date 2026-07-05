@@ -45,9 +45,21 @@ export default buildConfig({
             },
           },
         },
+        // "Check your email" page shown after registration, before the account
+        // is verified (see RegisterForm's onSuccess redirect).
+        verifyPending: {
+          Component: '/components/VerifyPendingView#VerifyPendingView',
+          path: '/verify-pending',
+          exact: true,
+          meta: {
+            title: 'Verify your email',
+          },
+        },
       },
       actions: ['/components/LogoutLink#LogoutLink', '/components/AccountLink#AccountLink'],
       providers: ['/components/RoleStyles#RoleStyles'],
+      // Banner reflecting the verification-link outcome (?verified / ?verifyError).
+      beforeLogin: ['/components/VerifyNotice#VerifyNotice'],
       afterLogin: ['/components/RegisterLink#RegisterLink'],
     },
     dashboard: {

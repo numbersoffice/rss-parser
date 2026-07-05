@@ -51,7 +51,9 @@ export const registerEndpoint: Endpoint = {
 
     try {
       // Whitelisted fields only: the users beforeChange hook trusts Local API
-      // calls, so nothing from the request body may be spread in here.
+      // calls, so nothing from the request body may be spread in here. The
+      // account is created unverified (no req.user here), so Payload sends the
+      // verification email as part of this create.
       await req.payload.create({
         collection: 'users',
         data: { email, password, role: 'user' },

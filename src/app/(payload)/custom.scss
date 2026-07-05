@@ -338,6 +338,37 @@ select {
 .register-link a {
   color: var(--accent);
 }
+
+/* "check your email" page after registration (src/components/VerifyPendingView.tsx) */
+.verify-pending h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  text-align: center;
+}
+
+.verify-pending p {
+  text-align: center;
+  color: var(--theme-elevation-700);
+}
+
+/* verification-outcome banner above the login form (src/components/VerifyNotice.tsx) */
+.verify-notice {
+  margin: 0 0 var(--base);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--theme-elevation-200);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.verify-notice--ok {
+  border-color: var(--accent);
+  color: var(--theme-text);
+}
+
+.verify-notice--error {
+  border-color: var(--theme-error-500);
+  color: var(--theme-error-500);
+}
 /* fixed (non-editable) user dashboard: sizing and spacing live on the grid,
    widgets span columns (one column ≈ the editable dashboard's "small") */
 .user-dashboard {

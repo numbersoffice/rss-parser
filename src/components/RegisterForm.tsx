@@ -74,20 +74,14 @@ function CaptchaField({ apiRoute }: { apiRoute: string }) {
 
 export function RegisterForm({ adminRoute, apiRoute }: { adminRoute: string; apiRoute: string }) {
   const onSuccess: FormProps['onSuccess'] = async (_json, ctx) => {
+    // The new account is unverified, so we can't log in yet — send the visitor
+    // to the "check your email" page until they click the verification link.
     const emailValue = ctx?.formState?.email?.value
-    const passwordValue = ctx?.formState?.password?.value
-    try {
-      const res = await fetch(`${apiRoute}/users/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email: emailValue, password: passwordValue }),
-      })
-      // Full navigation so the admin SSR picks up the fresh auth cookie.
-      window.location.assign(res.ok ? adminRoute : `${adminRoute}/login`)
-    } catch {
-      window.location.assign(`${adminRoute}/login`)
-    }
+    const query =
+      typeof emailValue === 'string' && emailValue
+        ? `?email=${encodeURIComponent(emailValue)}`
+        : ''
+    window.location.assign(`${adminRoute}/verify-pending${query}`)
   }
 
   return (
