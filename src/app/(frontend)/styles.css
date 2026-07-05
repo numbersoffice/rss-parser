@@ -190,6 +190,41 @@ p {
     transform: none;
   }
 }
+/* per-feed landing page --------------------------------------------- */
+
+.feed-profile {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 2.5rem 0 1.5rem;
+}
+
+.feed-avatar {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border: 1px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--accent);
+  flex: none;
+}
+
+.feed-profile-meta {
+  min-width: 0;
+}
+
+.feed-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.feed-sub {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 /* logged-in feed list ------------------------------------------------ */
 
 .section-label {

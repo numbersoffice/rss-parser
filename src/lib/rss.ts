@@ -29,7 +29,7 @@ export function buildRssXml(source: Source, items: FeedItem[], feedUrl: string):
     })
     .join('\n')
 
-  const link = sourceLink(source, feedUrl)
+  const link = landingUrl(source, feedUrl)
   // Channel image: the account's profile picture (the mirrored bucket URL once
   // stored, otherwise the platform CDN URL). Emitted through several channel
   // elements because no single one is honoured everywhere: the plain RSS 2.0
@@ -70,6 +70,30 @@ function channelImage(imageUrl: string, name: string, link: string): string {
     <itunes:image href="${url}" />
     <webfeeds:icon>${url}</webfeeds:icon>\n`
   )
+}
+
+/**
+ * The channel <link> — the feed's "home page" — points at our own per-feed
+ * landing page (`/f/{type}/{handle}`) rather than the account on the origin
+ * platform. This is deliberate: RSS readers that derive a feed's sidebar icon
+ * by scraping its home page (NetNewsWire, among others) prefer that page's
+ * favicon/apple-touch-icon over the feed's declared <image>/webfeeds:icon. When
+ * <link> pointed straight at e.g. instagram.com, they scraped Instagram's own
+ * glyph. The landing page instead serves the account's profile picture as its
+ * apple-touch-icon (see the (frontend)/f route), so the reader shows the avatar.
+ * The landing page itself links out to the platform account. Derives the origin
+ * from the already-absolute feedUrl; falls back to the platform URL if that or
+ * the handle is somehow unavailable.
+ */
+function landingUrl(source: Source, feedUrl: string): string {
+  const handle = (source.handle ?? '').trim().replace(/^@/, '')
+  try {
+    const origin = new URL(feedUrl).origin
+    if (!handle) throw new Error('no handle')
+    return `${origin}/f/${encodeURIComponent(source.type)}/${encodeURIComponent(handle)}`
+  } catch {
+    return sourceLink(source, feedUrl)
+  }
 }
 
 function sourceLink(source: Source, fallback: string): string {
