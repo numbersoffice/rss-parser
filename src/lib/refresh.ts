@@ -29,16 +29,19 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
   const debug: Record<string, unknown> = {}
 
   let result: RefreshResult
+  let profileFields: ProfileImageFields = {}
   try {
-    const items = await getAdapter(source.type).fetchItems(source, debug)
+    const { items, profile } = await getAdapter(source.type).fetchItems(source, debug)
     await storeItems(payload, source, items)
+    // Mirror the account's profile picture into our bucket (see resolveProfileImage).
+    profileFields = await resolveProfileImage(payload, source, profile?.imageUrl, true)
     result = { status: 'success', itemCount: items.length, debug }
   } catch (err) {
     result = { status: 'error', error: describeError(err), debug }
     payload.logger.warn(`Refresh failed for source "${source.name}": ${result.error}`)
   }
 
-  await recordFetchOutcome(payload, source.id, result)
+  await recordFetchOutcome(payload, source.id, result, profileFields)
   return result
 }
 
@@ -147,6 +150,36 @@ async function resolveImage(
 }
 
 /**
+ * Download an image from a URL and store it in our public bucket, returning the
+ * stable bucket URL and the created media doc's id. Throws on download/upload
+ * failure so callers can decide how to degrade. The lower-level primitive shared
+ * by post-image mirroring ({@link mirrorImageUrl}) and profile-image mirroring
+ * ({@link resolveProfileImage}).
+ */
+export async function storeImageFromUrl(
+  payload: Payload,
+  url: string,
+  name: string,
+): Promise<{ imageUrl: string; image: number }> {
+  const res = await outboundFetch(url, { signal: AbortSignal.timeout(20_000) })
+  if (!res.ok) {
+    throw new Error(`image request returned ${res.status}`)
+  }
+  const bytes = Buffer.from(await res.arrayBuffer())
+  const mimetype = res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg'
+  const media = await payload.create({
+    collection: 'media',
+    data: {},
+    file: { data: bytes, mimetype, name, size: bytes.byteLength },
+    depth: 0,
+  })
+  // Read the URL off the created doc, not the requested name — Payload
+  // suffixes filename collisions.
+  const imageUrl = media.url ?? publicS3Url(media.filename ?? '')
+  return { imageUrl, image: media.id }
+}
+
+/**
  * Download a platform image, store it in our public bucket, and return the
  * bucket URL plus the content HTML rewritten to point at it. Throws on
  * download/upload failure so callers can decide how to degrade. Shared by the
@@ -158,30 +191,60 @@ export async function mirrorImageUrl(
   source: Source,
   item: { imageUrl: string; externalId: string; content: string },
 ): Promise<{ imageUrl: string; image: number; content: string }> {
-  const res = await outboundFetch(item.imageUrl, { signal: AbortSignal.timeout(20_000) })
-  if (!res.ok) {
-    throw new Error(`image request returned ${res.status}`)
-  }
-  const bytes = Buffer.from(await res.arrayBuffer())
-  const mimetype = res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg'
-  const media = await payload.create({
-    collection: 'media',
-    data: {},
-    file: {
-      data: bytes,
-      mimetype,
-      name: `${source.id}-${item.externalId}.jpg`,
-      size: bytes.byteLength,
-    },
-    depth: 0,
-  })
-  // Read the URL off the created doc, not the requested name — Payload
-  // suffixes filename collisions.
-  const publicUrl = media.url ?? publicS3Url(media.filename ?? '')
+  const stored = await storeImageFromUrl(payload, item.imageUrl, `${source.id}-${item.externalId}.jpg`)
   return {
-    imageUrl: publicUrl,
-    image: media.id,
-    content: rewriteImageUrl(item.content, item.imageUrl, publicUrl),
+    imageUrl: stored.imageUrl,
+    image: stored.image,
+    content: rewriteImageUrl(item.content, item.imageUrl, stored.imageUrl),
+  }
+}
+
+/** Source fields set by {@link resolveProfileImage}. */
+export interface ProfileImageFields {
+  profileImageUrl?: string
+  profileImage?: number
+}
+
+/**
+ * Decide what profile image a source should serve as its RSS channel image.
+ * Like {@link resolveImage} does for posts: Instagram's profile-pic CDN URL is
+ * signed and origin-restricted, so we mirror it into our bucket once and serve
+ * that stable URL thereafter.
+ *
+ * Mirror-once: a source whose profile image is already stored in the bucket is
+ * left untouched — the signed CDN URL changes every fetch, so we can't cheaply
+ * tell whether the avatar itself changed. On download/upload failure (or with
+ * `mirror` false, e.g. subscribe seeds fast and a background job mirrors later)
+ * we store the raw CDN URL and no media; because that stored URL is then not a
+ * bucket URL, the next mirror attempt retries.
+ */
+export async function resolveProfileImage(
+  payload: Payload,
+  source: Source,
+  profileCdnUrl: string | undefined,
+  mirror: boolean,
+): Promise<ProfileImageFields> {
+  if (!profileCdnUrl) return {}
+
+  // Already mirrored: keep the stored copy (see mirror-once note above).
+  const existingImage = relationId(source.profileImage)
+  if (existingImage && source.profileImageUrl && isPublicS3Url(source.profileImageUrl)) {
+    return {}
+  }
+
+  // S3 off, or the caller deferred mirroring — store the raw CDN URL for now.
+  if (!s3Enabled() || !mirror) {
+    return { profileImageUrl: profileCdnUrl }
+  }
+
+  try {
+    const stored = await storeImageFromUrl(payload, profileCdnUrl, `${source.id}-profile.jpg`)
+    return { profileImageUrl: stored.imageUrl, profileImage: stored.image }
+  } catch (err) {
+    payload.logger.warn(
+      `Could not mirror profile image for source "${source.name}": ${describeError(err)}`,
+    )
+    return { profileImageUrl: profileCdnUrl }
   }
 }
 
@@ -197,6 +260,7 @@ export async function recordFetchOutcome(
   payload: Payload,
   sourceId: string | number,
   result: RefreshResult,
+  extraFields: ProfileImageFields = {},
 ): Promise<void> {
   await payload.update({
     collection: 'sources',
@@ -206,6 +270,7 @@ export async function recordFetchOutcome(
       lastFetchStatus: result.status,
       lastFetchError: result.error ?? null,
       lastFetchDebug: result.debug ?? {},
+      ...extraFields,
     },
     depth: 0,
     context: { skipSourceRefresh: true },

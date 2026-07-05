@@ -1,6 +1,6 @@
 import type { TaskConfig } from 'payload'
 
-import { describeError, mirrorImageUrl } from '@/lib/refresh'
+import { describeError, mirrorImageUrl, resolveProfileImage } from '@/lib/refresh'
 import { isPublicS3Url, s3Enabled } from '@/lib/s3'
 import type { Source } from '@/payload-types'
 
@@ -72,6 +72,21 @@ export const mirrorSourceImagesTask: TaskConfig<'mirrorSourceImages'> = {
           }
         }),
       )
+    }
+
+    // Also mirror the source's profile picture if it's still on a CDN URL (it
+    // was seeded raw at subscribe). resolveProfileImage no-ops once it's stored.
+    if (source.profileImageUrl && !isPublicS3Url(source.profileImageUrl)) {
+      const profileFields = await resolveProfileImage(payload, source, source.profileImageUrl, true)
+      if (profileFields.profileImage) {
+        await payload.update({
+          collection: 'sources',
+          id: source.id,
+          data: profileFields,
+          depth: 0,
+          context: { skipSourceRefresh: true },
+        })
+      }
     }
 
     return { output: { mirrored } }
