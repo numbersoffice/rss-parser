@@ -29,15 +29,26 @@ export function buildRssXml(source: Source, items: FeedItem[], feedUrl: string):
     })
     .join('\n')
 
+  const link = sourceLink(source, feedUrl)
+  // Channel image: the account's profile picture (the mirrored bucket URL once
+  // stored, otherwise the platform CDN URL). RSS 2.0 requires url/title/link.
+  const image = source.profileImageUrl
+    ? `    <image>
+      <url>${escapeXml(source.profileImageUrl)}</url>
+      <title>${escapeXml(source.name)}</title>
+      <link>${escapeXml(link)}</link>
+    </image>\n`
+    : ''
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>${escapeXml(source.name)}</title>
-    <link>${escapeXml(sourceLink(source, feedUrl))}</link>
+    <link>${escapeXml(link)}</link>
     <atom:link href="${escapeXml(feedUrl)}" rel="self" type="application/rss+xml" />
     <description>${escapeXml(`${source.type} feed for ${source.handle}`)}</description>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
-${entries}
+${image}${entries}
   </channel>
 </rss>
 `

@@ -1,4 +1,4 @@
-import type { NormalizedItem, SourceAdapter } from './types'
+import type { NormalizedFeed, NormalizedItem, SourceAdapter } from './types'
 import type { Source } from '@/payload-types'
 import { escapeHtml } from '@/lib/html'
 import { outboundFetch, proxyEndpoint, randomSessionId } from '@/lib/proxy'
@@ -152,7 +152,7 @@ export const instagramAdapter: SourceAdapter = {
     return `https://www.instagram.com/${(source.handle ?? '').trim().replace(/^@/, '')}/`
   },
 
-  async fetchItems(source: Source, debug: Record<string, unknown> = {}): Promise<NormalizedItem[]> {
+  async fetchItems(source: Source, debug: Record<string, unknown> = {}): Promise<NormalizedFeed> {
     const proxy = proxyEndpoint()
     debug.proxied = proxy !== null
     debug.proxy = proxy ?? 'direct'
@@ -229,7 +229,14 @@ export const instagramAdapter: SourceAdapter = {
     }
 
     const body = (await res.json()) as {
-      data?: { user?: { is_private?: boolean; edge_owner_to_timeline_media?: { edges?: Array<{ node: IgTimelineMedia }> } } }
+      data?: {
+        user?: {
+          is_private?: boolean
+          profile_pic_url?: string
+          profile_pic_url_hd?: string
+          edge_owner_to_timeline_media?: { edges?: Array<{ node: IgTimelineMedia }> }
+        }
+      }
     }
 
     const user = body.data?.user
@@ -240,8 +247,15 @@ export const instagramAdapter: SourceAdapter = {
       throw new Error(`Instagram profile @${username} is private — only public profiles can be converted`)
     }
 
+    // Prefer the HD avatar; both are signed CDN URLs the refresh layer mirrors.
+    const profileImageUrl = user.profile_pic_url_hd ?? user.profile_pic_url
+    debug.hasProfileImage = Boolean(profileImageUrl)
+
     const edges = user.edge_owner_to_timeline_media?.edges ?? []
     debug.itemCount = edges.length
-    return edges.map(({ node }) => toItem(node, username))
+    return {
+      items: edges.map(({ node }) => toItem(node, username)),
+      profile: profileImageUrl ? { imageUrl: profileImageUrl } : undefined,
+    }
   },
 }

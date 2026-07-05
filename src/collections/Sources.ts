@@ -2,6 +2,7 @@ import type { CollectionConfig } from 'payload'
 
 import { sourceTypeOptions } from '@/adapters/registry'
 import { hiddenFromNonAdmins, isAdmin, isLoggedIn } from '@/lib/access'
+import { relationId } from '@/lib/relations'
 import { refreshSource } from '@/lib/refresh'
 import { defaultSourceName, normalizeHandle } from '@/lib/sources'
 
@@ -85,6 +86,31 @@ export const Sources: CollectionConfig = {
     },
     {
       type: 'collapsible',
+      label: 'Profile picture',
+      admin: {
+        initCollapsed: true,
+        description: 'The account avatar, served as the RSS channel image — managed automatically',
+      },
+      fields: [
+        {
+          name: 'profileImageUrl',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description:
+              'URL served as the feed image — the stored copy when one exists, otherwise the platform CDN',
+          },
+        },
+        {
+          name: 'profileImage',
+          type: 'upload',
+          relationTo: 'media',
+          admin: { readOnly: true, description: 'Stored copy of the profile picture' },
+        },
+      ],
+    },
+    {
+      type: 'collapsible',
       label: 'Last fetch',
       admin: { initCollapsed: true },
       fields: [
@@ -157,6 +183,23 @@ export const Sources: CollectionConfig = {
           where: { source: { equals: id } },
           req,
         })
+      },
+    ],
+    afterDelete: [
+      // Clean up the source's stored profile picture from S3. Feed-item images
+      // are handled by FeedItems.afterDelete via the beforeDelete cascade above;
+      // the profile image is owned by the source, so it's cleaned up here.
+      // Never fail the source deletion over S3 trouble (e.g. rotated credentials).
+      async ({ doc, req }) => {
+        const mediaId = relationId(doc.profileImage)
+        if (!mediaId) return
+        try {
+          await req.payload.delete({ collection: 'media', id: mediaId, depth: 0, req })
+        } catch (err) {
+          req.payload.logger.warn(
+            `Failed to delete profile image ${mediaId} for source ${doc.id}: ${err instanceof Error ? err.message : String(err)}`,
+          )
+        }
       },
     ],
   },

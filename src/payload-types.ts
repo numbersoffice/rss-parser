@@ -222,6 +222,14 @@ export interface Source {
    * How long fetched items are considered fresh before the feed re-fetches
    */
   refreshIntervalMinutes?: number | null;
+  /**
+   * URL served as the feed image — the stored copy when one exists, otherwise the platform CDN
+   */
+  profileImageUrl?: string | null;
+  /**
+   * Stored copy of the profile picture
+   */
+  profileImage?: (number | null) | Media;
   lastFetchedAt?: string | null;
   lastFetchStatus?: ('success' | 'error') | null;
   lastFetchError?: string | null;
@@ -239,6 +247,24 @@ export interface Source {
     | null;
   updatedAt: string;
   createdAt: string;
+}
+/**
+ * Stored copies of feed item images, kept in sync automatically — no need to edit these
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media".
+ */
+export interface Media {
+  id: number;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
 }
 /**
  * Fetched posts, kept in sync automatically — no need to edit these
@@ -273,24 +299,6 @@ export interface FeedItem {
   publishedAt: string;
   updatedAt: string;
   createdAt: string;
-}
-/**
- * Stored copies of feed item images, kept in sync automatically — no need to edit these
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "media".
- */
-export interface Media {
-  id: number;
-  updatedAt: string;
-  createdAt: string;
-  url?: string | null;
-  thumbnailURL?: string | null;
-  filename?: string | null;
-  mimeType?: string | null;
-  filesize?: number | null;
-  width?: number | null;
-  height?: number | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -494,6 +502,8 @@ export interface SourcesSelect<T extends boolean = true> {
   handle?: T;
   enabled?: T;
   refreshIntervalMinutes?: T;
+  profileImageUrl?: T;
+  profileImage?: T;
   lastFetchedAt?: T;
   lastFetchStatus?: T;
   lastFetchError?: T;
