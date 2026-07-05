@@ -31,17 +31,17 @@ export function buildRssXml(source: Source, items: FeedItem[], feedUrl: string):
 
   const link = sourceLink(source, feedUrl)
   // Channel image: the account's profile picture (the mirrored bucket URL once
-  // stored, otherwise the platform CDN URL). RSS 2.0 requires url/title/link.
-  const image = source.profileImageUrl
-    ? `    <image>
-      <url>${escapeXml(source.profileImageUrl)}</url>
-      <title>${escapeXml(source.name)}</title>
-      <link>${escapeXml(link)}</link>
-    </image>\n`
-    : ''
+  // stored, otherwise the platform CDN URL). Emitted through several channel
+  // elements because no single one is honoured everywhere: the plain RSS 2.0
+  // <image> is dimension-capped (max 144×400) so readers that respect the spec
+  // skip our square avatar, and most modern readers instead look for the feed
+  // icon in a namespaced element — iTunes' <itunes:image> (the de-facto standard
+  // for channel artwork) or Feedly's <webfeeds:icon>. Emitting all three lets
+  // each client pick whichever it understands.
+  const image = source.profileImageUrl ? channelImage(source.profileImageUrl, source.name, link) : ''
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:webfeeds="http://webfeeds.org/rss/1.0">
   <channel>
     <title>${escapeXml(source.name)}</title>
     <link>${escapeXml(link)}</link>
@@ -52,6 +52,24 @@ ${image}${entries}
   </channel>
 </rss>
 `
+}
+
+/**
+ * Render the channel-level profile picture as the three widely-recognised feed
+ * icon elements (see the call site for why one isn't enough). `imageUrl` is the
+ * stable bucket URL once mirrored, otherwise the platform CDN URL.
+ */
+function channelImage(imageUrl: string, name: string, link: string): string {
+  const url = escapeXml(imageUrl)
+  return (
+    `    <image>
+      <url>${url}</url>
+      <title>${escapeXml(name)}</title>
+      <link>${escapeXml(link)}</link>
+    </image>
+    <itunes:image href="${url}" />
+    <webfeeds:icon>${url}</webfeeds:icon>\n`
+  )
 }
 
 function sourceLink(source: Source, fallback: string): string {
