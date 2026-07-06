@@ -2,6 +2,7 @@ import type { Endpoint } from 'payload'
 import { addDataAndFileToRequest, ValidationError } from 'payload'
 
 import { generateCaptcha, verifyCaptcha } from '@/lib/captcha'
+import { isDisposableEmailDomain } from '@/lib/disposableEmail'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -38,6 +39,15 @@ export const registerEndpoint: Endpoint = {
 
     if (!EMAIL_RE.test(email)) {
       return Response.json({ message: 'Enter a valid email address.' }, { status: 400 })
+    }
+    if (isDisposableEmailDomain(email)) {
+      return Response.json(
+        {
+          message:
+            "Anonymous or disposable email addresses aren't supported due to spam concerns. Please sign up with a permanent email address.",
+        },
+        { status: 400 },
+      )
     }
     if (password.length < 8 || password.length > 128) {
       return Response.json({ message: 'Password must be 8–128 characters.' }, { status: 400 })
