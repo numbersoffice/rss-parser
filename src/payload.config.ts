@@ -13,6 +13,11 @@ import { Subscriptions } from './collections/Subscriptions'
 import { Users } from './collections/Users'
 import { Settings } from './globals/Settings'
 import { mirrorSourceImagesTask } from './lib/jobs/mirrorSourceImages'
+import {
+  PRUNE_UNVERIFIED_CRON,
+  PRUNE_UNVERIFIED_QUEUE,
+  pruneUnverifiedUsersTask,
+} from './lib/jobs/pruneUnverifiedUsers'
 import { captchaEndpoint, registerEndpoint } from './lib/registration'
 import { publicS3Url, s3Enabled } from './lib/s3'
 import { migrations } from './migrations'
@@ -104,10 +109,15 @@ export default buildConfig({
   globals: [Settings],
   // Background jobs. Mirroring a new source's images to S3 is deferred off the
   // subscribe request into `mirrorSourceImages`, enqueued and kicked off (via
-  // Next `after()`) so saves return fast. There's no cron: jobs are run promptly
-  // on enqueue and drained again on feed reads as a backstop.
+  // Next `after()`) so saves return fast — that path needs no cron.
+  //
+  // `pruneUnverifiedUsers` is a scheduled task: `autoRun` ticks the `nightly`
+  // queue at midnight (server time), which both queues the task (per its own
+  // `schedule`) and runs it. autoRun runs in-process on the long-lived server
+  // (Coolify `next start`), so it must not be used on serverless hosts.
   jobs: {
-    tasks: [mirrorSourceImagesTask],
+    tasks: [mirrorSourceImagesTask, pruneUnverifiedUsersTask],
+    autoRun: [{ cron: PRUNE_UNVERIFIED_CRON, queue: PRUNE_UNVERIFIED_QUEUE }],
     // Runs are triggered in-process (never via the public HTTP endpoint), so
     // lock the endpoint down.
     access: { run: () => false },

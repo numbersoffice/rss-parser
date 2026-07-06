@@ -16,6 +16,11 @@ export const Users: CollectionConfig = {
     useAsTitle: 'email',
     defaultColumns: ['email', 'role'],
     hidden: hiddenFromNonAdmins,
+    components: {
+      // Admin-only line above the list: when the unverified-account cleanup
+      // last ran and when it runs next (the component no-ops for non-admins).
+      beforeListTable: ['/components/UnverifiedCleanupNotice#UnverifiedCleanupNotice'],
+    },
   },
   // Self-registered accounts must confirm they own the email address before
   // they can log in. Built-in verification blocks login until `_verified` is

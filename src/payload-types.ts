@@ -97,9 +97,11 @@ export interface Config {
   fallbackLocale: null;
   globals: {
     settings: Setting;
+    'payload-jobs-stats': PayloadJobsStat;
   };
   globalsSelect: {
     settings: SettingsSelect<false> | SettingsSelect<true>;
+    'payload-jobs-stats': PayloadJobsStatsSelect<false> | PayloadJobsStatsSelect<true>;
   };
   locale: null;
   widgets: {
@@ -110,6 +112,7 @@ export interface Config {
   jobs: {
     tasks: {
       mirrorSourceImages: TaskMirrorSourceImages;
+      pruneUnverifiedUsers: TaskPruneUnverifiedUsers;
       inline: {
         input: unknown;
         output: unknown;
@@ -371,7 +374,7 @@ export interface PayloadJob {
     | {
         executedAt: string;
         completedAt: string;
-        taskSlug: 'inline' | 'mirrorSourceImages';
+        taskSlug: 'inline' | 'mirrorSourceImages' | 'pruneUnverifiedUsers';
         taskID: string;
         input?:
           | {
@@ -404,10 +407,19 @@ export interface PayloadJob {
         id?: string | null;
       }[]
     | null;
-  taskSlug?: ('inline' | 'mirrorSourceImages') | null;
+  taskSlug?: ('inline' | 'mirrorSourceImages' | 'pruneUnverifiedUsers') | null;
   queue?: string | null;
   waitUntil?: string | null;
   processing?: boolean | null;
+  meta?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -605,6 +617,7 @@ export interface PayloadJobsSelect<T extends boolean = true> {
   queue?: T;
   waitUntil?: T;
   processing?: T;
+  meta?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -655,10 +668,38 @@ export interface Setting {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs-stats".
+ */
+export interface PayloadJobsStat {
+  id: number;
+  stats?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "settings_select".
  */
 export interface SettingsSelect<T extends boolean = true> {
   maxSubscriptionsPerUser?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs-stats_select".
+ */
+export interface PayloadJobsStatsSelect<T extends boolean = true> {
+  stats?: T;
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;
@@ -691,6 +732,14 @@ export interface TaskMirrorSourceImages {
   input: {
     sourceId: number;
   };
+  output?: unknown;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskPruneUnverifiedUsers".
+ */
+export interface TaskPruneUnverifiedUsers {
+  input?: unknown;
   output?: unknown;
 }
 /**

@@ -202,6 +202,19 @@ html[data-theme='dark'] {
   color: var(--theme-elevation-500);
 }
 
+/* admin-only line above the Users list summarising the unverified-account
+   cleanup schedule (UnverifiedCleanupNotice) */
+.cleanup-notice {
+  margin-bottom: var(--base);
+  font-size: 0.85rem;
+  color: var(--theme-elevation-500);
+}
+
+.cleanup-notice strong {
+  font-weight: 600;
+  color: var(--theme-elevation-800);
+}
+
 /* a document tab bar with no tabs left (subscriptions: API tab off via
    hideAPIURL, Edit tab off via its tab condition) still paints a spacer
    (.doc-tabs:after) — collapse it entirely */
