@@ -194,6 +194,23 @@ html[data-theme='dark'] {
   transform: none;
 }
 
+/* Residential data usage widget (src/components/DataUsageWidget.tsx): remaining
+   Decodo proxy GB. Shares the .subs-widget card + type + button classes; only
+   the bits below differ. */
+.usage-widget {
+  /* the "unavailable" fallback has no big number, so top-align its single
+     label block instead of the count/label baseline row */
+  justify-content: space-between;
+}
+
+/* env-var names called out in the "usage unavailable" state */
+.usage-widget code {
+  font-family: var(--font-mono);
+  /* nudge down from the sublabel size so the names read as inline tokens */
+  font-size: 0.95em;
+  color: var(--theme-elevation-700);
+}
+
 /* quiet "7 / 12 subscriptions used" above the subscriptions list
    (src/components/SubscriptionLimitCounter.tsx) */
 .subs-limit {

@@ -106,6 +106,7 @@ export interface Config {
   locale: null;
   widgets: {
     'subscriptions-overview': SubscriptionsOverviewWidget;
+    'decodo-data-usage': DecodoDataUsageWidget;
     collections: CollectionsWidget;
   };
   user: User;
@@ -709,6 +710,16 @@ export interface PayloadJobsStatsSelect<T extends boolean = true> {
  * via the `definition` "subscriptions-overview_widget".
  */
 export interface SubscriptionsOverviewWidget {
+  data?: {
+    [k: string]: unknown;
+  };
+  width: 'small' | 'medium';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "decodo-data-usage_widget".
+ */
+export interface DecodoDataUsageWidget {
   data?: {
     [k: string]: unknown;
   };
