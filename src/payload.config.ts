@@ -8,11 +8,13 @@ import { fileURLToPath } from 'url'
 
 import { FeedItems } from './collections/FeedItems'
 import { Media } from './collections/Media'
+import { RequestLogs } from './collections/RequestLogs'
 import { Sources } from './collections/Sources'
 import { Subscriptions } from './collections/Subscriptions'
 import { Users } from './collections/Users'
 import { Settings } from './globals/Settings'
 import { mirrorSourceImagesTask } from './lib/jobs/mirrorSourceImages'
+import { pruneRequestLogsTask } from './lib/jobs/pruneRequestLogs'
 import {
   PRUNE_UNVERIFIED_CRON,
   PRUNE_UNVERIFIED_QUEUE,
@@ -85,9 +87,10 @@ export default buildConfig({
           maxWidth: 'medium',
         },
         {
+          // slug kept as 'fetch-errors' so existing saved dashboards keep the widget
           slug: 'fetch-errors',
-          label: 'Fetch errors',
-          Component: '/components/FetchErrorsWidget#FetchErrorsWidget',
+          label: 'Fetch success rate',
+          Component: '/components/FetchTrendWidget#FetchTrendWidget',
           minWidth: 'small',
           maxWidth: 'medium',
         },
@@ -118,19 +121,21 @@ export default buildConfig({
       },
     },
   },
-  collections: [Subscriptions, Sources, FeedItems, Media, Users],
+  collections: [Subscriptions, Sources, FeedItems, Media, Users, RequestLogs],
   endpoints: [captchaEndpoint, registerEndpoint],
   globals: [Settings],
   // Background jobs. Mirroring a new source's images to S3 is deferred off the
   // subscribe request into `mirrorSourceImages`, enqueued and kicked off (via
   // Next `after()`) so saves return fast — that path needs no cron.
   //
-  // `pruneUnverifiedUsers` is a scheduled task: `autoRun` ticks the `nightly`
-  // queue at midnight (server time), which both queues the task (per its own
-  // `schedule`) and runs it. autoRun runs in-process on the long-lived server
-  // (Coolify `next start`), so it must not be used on serverless hosts.
+  // `pruneUnverifiedUsers` and `pruneRequestLogs` are scheduled tasks: `autoRun`
+  // ticks the `nightly` queue at midnight (server time), which both queues the
+  // tasks (per their own `schedule`) and runs them. One autoRun entry drains the
+  // whole queue, so both nightly tasks share it. autoRun runs in-process on the
+  // long-lived server (Coolify `next start`), so it must not be used on
+  // serverless hosts.
   jobs: {
-    tasks: [mirrorSourceImagesTask, pruneUnverifiedUsersTask],
+    tasks: [mirrorSourceImagesTask, pruneUnverifiedUsersTask, pruneRequestLogsTask],
     autoRun: [{ cron: PRUNE_UNVERIFIED_CRON, queue: PRUNE_UNVERIFIED_QUEUE }],
     // Runs are triggered in-process (never via the public HTTP endpoint), so
     // lock the endpoint down.

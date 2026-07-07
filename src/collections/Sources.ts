@@ -115,6 +115,15 @@ export const Sources: CollectionConfig = {
       admin: { initCollapsed: true },
       fields: [
         {
+          name: 'health',
+          type: 'ui',
+          admin: {
+            components: {
+              Field: '@/components/SourceHealthBar#SourceHealthBar',
+            },
+          },
+        },
+        {
           name: 'lastFetchedAt',
           type: 'date',
           admin: { readOnly: true, date: { pickerAppearance: 'dayAndTime' } },
@@ -180,6 +189,13 @@ export const Sources: CollectionConfig = {
         })
         await req.payload.delete({
           collection: 'feed-items',
+          where: { source: { equals: id } },
+          req,
+        })
+        // Request logs reference the source too; drop them so they don't outlive
+        // it (the source relationship is nullable, so they'd otherwise orphan).
+        await req.payload.delete({
+          collection: 'request-logs',
           where: { source: { equals: id } },
           req,
         })

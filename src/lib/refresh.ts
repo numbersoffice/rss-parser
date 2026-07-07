@@ -275,6 +275,27 @@ export async function recordFetchOutcome(
     depth: 0,
     context: { skipSourceRefresh: true },
   })
+
+  // Append a request-log row for the trend chart / per-source health bar. This
+  // is history (the source fields above only hold the latest outcome), pruned
+  // after a week. Never let logging break a fetch — refreshSource is contracted
+  // not to throw.
+  try {
+    const debug = (result.debug ?? {}) as Record<string, unknown>
+    await payload.create({
+      collection: 'request-logs',
+      data: {
+        source: typeof sourceId === 'string' ? Number(sourceId) : sourceId,
+        status: result.status,
+        error: result.error ?? null,
+        httpStatus: typeof debug.httpStatus === 'number' ? debug.httpStatus : null,
+        durationMs: typeof debug.durationMs === 'number' ? debug.durationMs : null,
+      },
+      depth: 0,
+    })
+  } catch (err) {
+    payload.logger.warn(`Could not write request log for source ${sourceId}: ${describeError(err)}`)
+  }
 }
 
 /**

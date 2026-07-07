@@ -4,6 +4,7 @@ import * as migration_20260704_004812_add_media from './20260704_004812_add_medi
 import * as migration_20260704_225935_add_payload_jobs from './20260704_225935_add_payload_jobs';
 import * as migration_20260705_010847_add_source_profile_image from './20260705_010847_add_source_profile_image';
 import * as migration_20260705_212159_add_user_verification from './20260705_212159_add_user_verification';
+import * as migration_20260707_170141_add_request_logs from './20260707_170141_add_request_logs';
 
 export const migrations = [
   {
@@ -34,6 +35,11 @@ export const migrations = [
   {
     up: migration_20260705_212159_add_user_verification.up,
     down: migration_20260705_212159_add_user_verification.down,
-    name: '20260705_212159_add_user_verification'
+    name: '20260705_212159_add_user_verification',
+  },
+  {
+    up: migration_20260707_170141_add_request_logs.up,
+    down: migration_20260707_170141_add_request_logs.down,
+    name: '20260707_170141_add_request_logs'
   },
 ];

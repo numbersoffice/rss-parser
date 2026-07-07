@@ -298,64 +298,69 @@ html[data-theme='dark'] {
   color: var(--theme-elevation-700);
 }
 
-/* recent adapter fetch failures inside the .usage-widget shell
-   (src/components/FetchErrorsWidget.tsx) */
-.fetch-errors {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--base) / 2);
+/* minimal 7-day success-rate sparkline inside the .usage-widget shell
+   (src/components/FetchTrendWidget.tsx) — no axes/grid/fill, one thin line */
+.trend-chart {
+  width: 100%;
+  height: 72px;
   margin: calc(var(--base) / 4) 0 0;
-  padding: 0;
-  list-style: none;
+  overflow: visible;
 }
 
-.fetch-errors__item {
+/* preserveAspectRatio="none" stretches the SVG, so keep strokes a real pixel
+   width and un-distorted with non-scaling-stroke */
+.trend-chart__baseline {
+  stroke: var(--theme-elevation-150);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.trend-chart__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+  vector-effect: non-scaling-stroke;
+}
+
+.trend-chart__dot {
+  fill: var(--accent);
+}
+
+.trend-chart__label {
+  fill: var(--theme-elevation-500);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+/* per-source health strip: last few fetch attempts as coloured dots
+   (src/components/SourceHealthBar.tsx), shown on the source edit view */
+.source-health__dots {
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding-left: calc(var(--base) / 2);
-  border-left: 2px solid var(--theme-error-500, #e11d48);
+  gap: 0.35rem;
+  align-items: center;
 }
 
-.fetch-errors__row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: calc(var(--base) / 2);
-}
-
-.fetch-errors__source {
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--theme-text);
-  text-decoration: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fetch-errors__source:hover,
-.fetch-errors__source:focus-visible {
-  text-decoration: underline;
-}
-
-.fetch-errors__time {
+.source-health__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
   flex-shrink: 0;
-  font-size: 0.75rem;
-  color: var(--theme-elevation-500);
-  font-variant-numeric: tabular-nums;
 }
 
-/* clamp the message to two lines; full text is in the title attribute */
-.fetch-errors__message {
+.source-health__dot--ok {
+  background: var(--theme-success-500, #16a34a);
+}
+
+.source-health__dot--err {
+  background: var(--theme-error-500, #e11d48);
+}
+
+.source-health__empty {
   margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.3;
-  color: var(--theme-elevation-600);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-size: 0.8rem;
+  color: var(--theme-elevation-500);
 }
 
 /* quiet "7 / 12 subscriptions used" above the subscriptions list

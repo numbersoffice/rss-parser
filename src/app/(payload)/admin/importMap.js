@@ -1,6 +1,8 @@
 import { FeedUrlField as FeedUrlField_05f118428fcb6335db9917e53c14c423 } from '@/components/FeedUrlField'
 import { SubscriptionLimitCounter as SubscriptionLimitCounter_b52aa968124e258047389ac8e9d42be9 } from '../../../components/SubscriptionLimitCounter'
+import { SourceHealthBar as SourceHealthBar_1d11d5bcf5853331e08842c6e622dc87 } from '@/components/SourceHealthBar'
 import { UnverifiedCleanupNotice as UnverifiedCleanupNotice_6b639b175d8a6e65f6accd8bcdc306e9 } from '../../../components/UnverifiedCleanupNotice'
+import { RequestLogCleanupNotice as RequestLogCleanupNotice_f1f80c50f0806b63fd6e406ccffe9041 } from '../../../components/RequestLogCleanupNotice'
 import { NavIcon as NavIcon_672434ec0cfa2eb49722dadb8e0e00c9 } from '../../../components/Wordmark'
 import { LoginLogo as LoginLogo_672434ec0cfa2eb49722dadb8e0e00c9 } from '../../../components/Wordmark'
 import { LogoutLink as LogoutLink_2414e27aff656105e93a53fc3633fe19 } from '../../../components/LogoutLink'
@@ -14,14 +16,16 @@ import { RegisterView as RegisterView_e6e9c13a362da938250f046cf5d57093 } from '.
 import { VerifyPendingView as VerifyPendingView_7f41720bd58053ec6dd634fcea5cc9d0 } from '../../../components/VerifyPendingView'
 import { SubscriptionsWidget as SubscriptionsWidget_2abd24e0b948c3658f0e029740d2c554 } from '../../../components/SubscriptionsWidget'
 import { DataUsageWidget as DataUsageWidget_ed39dcc1fcd865b21f77495b978bbf91 } from '../../../components/DataUsageWidget'
-import { FetchErrorsWidget as FetchErrorsWidget_28581a3020e3c07dc0fad3a52cbbf101 } from '../../../components/FetchErrorsWidget'
+import { FetchTrendWidget as FetchTrendWidget_b611e840a21dafc23545ad5cfe478368 } from '../../../components/FetchTrendWidget'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
 /** @type import('payload').ImportMap */
 export const importMap = {
   "@/components/FeedUrlField#FeedUrlField": FeedUrlField_05f118428fcb6335db9917e53c14c423,
   "/components/SubscriptionLimitCounter#SubscriptionLimitCounter": SubscriptionLimitCounter_b52aa968124e258047389ac8e9d42be9,
+  "@/components/SourceHealthBar#SourceHealthBar": SourceHealthBar_1d11d5bcf5853331e08842c6e622dc87,
   "/components/UnverifiedCleanupNotice#UnverifiedCleanupNotice": UnverifiedCleanupNotice_6b639b175d8a6e65f6accd8bcdc306e9,
+  "/components/RequestLogCleanupNotice#RequestLogCleanupNotice": RequestLogCleanupNotice_f1f80c50f0806b63fd6e406ccffe9041,
   "/components/Wordmark#NavIcon": NavIcon_672434ec0cfa2eb49722dadb8e0e00c9,
   "/components/Wordmark#LoginLogo": LoginLogo_672434ec0cfa2eb49722dadb8e0e00c9,
   "/components/LogoutLink#LogoutLink": LogoutLink_2414e27aff656105e93a53fc3633fe19,
@@ -35,6 +39,6 @@ export const importMap = {
   "/components/VerifyPendingView#VerifyPendingView": VerifyPendingView_7f41720bd58053ec6dd634fcea5cc9d0,
   "/components/SubscriptionsWidget#SubscriptionsWidget": SubscriptionsWidget_2abd24e0b948c3658f0e029740d2c554,
   "/components/DataUsageWidget#DataUsageWidget": DataUsageWidget_ed39dcc1fcd865b21f77495b978bbf91,
-  "/components/FetchErrorsWidget#FetchErrorsWidget": FetchErrorsWidget_28581a3020e3c07dc0fad3a52cbbf101,
+  "/components/FetchTrendWidget#FetchTrendWidget": FetchTrendWidget_b611e840a21dafc23545ad5cfe478368,
   "@payloadcms/next/rsc#CollectionCards": CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1
 }

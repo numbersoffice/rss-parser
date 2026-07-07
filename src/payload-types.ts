@@ -72,6 +72,7 @@ export interface Config {
     'feed-items': FeedItem;
     media: Media;
     users: User;
+    'request-logs': RequestLog;
     'payload-kv': PayloadKv;
     'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
@@ -85,6 +86,7 @@ export interface Config {
     'feed-items': FeedItemsSelect<false> | FeedItemsSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
+    'request-logs': RequestLogsSelect<false> | RequestLogsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -107,6 +109,7 @@ export interface Config {
   widgets: {
     'subscriptions-overview': SubscriptionsOverviewWidget;
     'decodo-data-usage': DecodoDataUsageWidget;
+    'fetch-errors': FetchErrorsWidget;
     collections: CollectionsWidget;
   };
   user: User;
@@ -114,6 +117,7 @@ export interface Config {
     tasks: {
       mirrorSourceImages: TaskMirrorSourceImages;
       pruneUnverifiedUsers: TaskPruneUnverifiedUsers;
+      pruneRequestLogs: TaskPruneRequestLogs;
       inline: {
         input: unknown;
         output: unknown;
@@ -307,6 +311,28 @@ export interface FeedItem {
   createdAt: string;
 }
 /**
+ * One row per adapter fetch attempt, used for health trends — created and pruned automatically (kept for a week)
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "request-logs".
+ */
+export interface RequestLog {
+  id: number;
+  source?: (number | null) | Source;
+  status?: ('success' | 'error') | null;
+  error?: string | null;
+  /**
+   * HTTP status of the fetch, when the adapter reported one
+   */
+  httpStatus?: number | null;
+  /**
+   * Fetch duration in milliseconds, when reported
+   */
+  durationMs?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -375,7 +401,7 @@ export interface PayloadJob {
     | {
         executedAt: string;
         completedAt: string;
-        taskSlug: 'inline' | 'mirrorSourceImages' | 'pruneUnverifiedUsers';
+        taskSlug: 'inline' | 'mirrorSourceImages' | 'pruneUnverifiedUsers' | 'pruneRequestLogs';
         taskID: string;
         input?:
           | {
@@ -408,7 +434,7 @@ export interface PayloadJob {
         id?: string | null;
       }[]
     | null;
-  taskSlug?: ('inline' | 'mirrorSourceImages' | 'pruneUnverifiedUsers') | null;
+  taskSlug?: ('inline' | 'mirrorSourceImages' | 'pruneUnverifiedUsers' | 'pruneRequestLogs') | null;
   queue?: string | null;
   waitUntil?: string | null;
   processing?: boolean | null;
@@ -450,6 +476,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'users';
         value: number | User;
+      } | null)
+    | ({
+        relationTo: 'request-logs';
+        value: number | RequestLog;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -581,6 +611,19 @@ export interface UsersSelect<T extends boolean = true> {
         createdAt?: T;
         expiresAt?: T;
       };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "request-logs_select".
+ */
+export interface RequestLogsSelect<T extends boolean = true> {
+  source?: T;
+  status?: T;
+  error?: T;
+  httpStatus?: T;
+  durationMs?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -727,6 +770,16 @@ export interface DecodoDataUsageWidget {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "fetch-errors_widget".
+ */
+export interface FetchErrorsWidget {
+  data?: {
+    [k: string]: unknown;
+  };
+  width: 'small' | 'medium';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "collections_widget".
  */
 export interface CollectionsWidget {
@@ -750,6 +803,14 @@ export interface TaskMirrorSourceImages {
  * via the `definition` "TaskPruneUnverifiedUsers".
  */
 export interface TaskPruneUnverifiedUsers {
+  input?: unknown;
+  output?: unknown;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskPruneRequestLogs".
+ */
+export interface TaskPruneRequestLogs {
   input?: unknown;
   output?: unknown;
 }
