@@ -8,6 +8,15 @@ export async function getSubscriptionLimit(payload: Payload): Promise<number> {
   return settings?.maxSubscriptionsPerUser ?? DEFAULT_MAX_SUBSCRIPTIONS
 }
 
+export const DEFAULT_MAX_FETCH_ATTEMPTS = 3
+
+/** The admin-configured number of fetch attempts per source before giving up
+ * (settings global). Each retry rotates to a fresh proxy IP — see the adapter. */
+export async function getMaxFetchAttempts(payload: Payload): Promise<number> {
+  const settings = await payload.findGlobal({ slug: 'settings', depth: 0 })
+  return settings?.maxFetchAttempts ?? DEFAULT_MAX_FETCH_ATTEMPTS
+}
+
 /** How many subscriptions a user currently has. Pass `req` from inside a
  * hook so the count sees the surrounding transaction. */
 export async function countUserSubscriptions(

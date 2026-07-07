@@ -707,6 +707,10 @@ export interface Setting {
    * How many subscriptions a regular user may have. Lowering it below what a user already has keeps their existing subscriptions but blocks new ones until they are back under the limit. Admins are not limited.
    */
   maxSubscriptionsPerUser: number;
+  /**
+   * How many times to try fetching a source before giving up. Instagram returns 401 from a fraction of residential-proxy IPs, so each retry rotates to a fresh IP — 2–3 attempts recovers most transient blocks. Set to 1 to disable retrying.
+   */
+  maxFetchAttempts: number;
   updatedAt?: string | null;
   createdAt?: string | null;
 }
@@ -734,6 +738,7 @@ export interface PayloadJobsStat {
  */
 export interface SettingsSelect<T extends boolean = true> {
   maxSubscriptionsPerUser?: T;
+  maxFetchAttempts?: T;
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;

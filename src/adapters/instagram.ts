@@ -1,4 +1,4 @@
-import type { NormalizedFeed, NormalizedItem, SourceAdapter } from './types'
+import type { AttemptRecord, NormalizedFeed, NormalizedItem, SourceAdapter } from './types'
 import type { Source } from '@/payload-types'
 import { escapeHtml } from '@/lib/html'
 import { outboundFetch, proxyEndpoint, randomSessionId, sessionForSource } from '@/lib/proxy'
@@ -113,6 +113,14 @@ function firstLine(text: string, maxLength = 120): string {
   return line.length > maxLength ? `${line.slice(0, maxLength - 1)}…` : line
 }
 
+/** The per-attempt HTTP metadata fetchProfile leaves on `debug`. */
+function attemptMeta(debug: Record<string, unknown>): Pick<AttemptRecord, 'httpStatus' | 'durationMs'> {
+  return {
+    httpStatus: typeof debug.httpStatus === 'number' ? debug.httpStatus : null,
+    durationMs: typeof debug.durationMs === 'number' ? debug.durationMs : null,
+  }
+}
+
 /** Snapshot a subset of response headers (those present) for the debug record. */
 function pickHeaders(headers: Headers, names: string[]): Record<string, string> {
   const out: Record<string, string> = {}
@@ -145,6 +153,120 @@ function toItem(media: IgTimelineMedia, username: string): NormalizedItem {
   }
 }
 
+/** A fetch failure that retrying on a fresh proxy IP might recover — IP-level
+ * blocks (401/403/429) or a login-wall HTML response. Distinct from permanent
+ * errors like a missing or private profile, which no retry can fix. */
+class RetryableFetchError extends Error {}
+
+/**
+ * One attempt at fetching a profile on a given sticky proxy session: prime a
+ * guest session, then call web_profile_info with those cookies plus the CSRF
+ * and fingerprint headers. Throws `RetryableFetchError` for IP-level blocks so
+ * the caller can retry on a new IP; throws a plain `Error` for permanent
+ * failures (missing/private profile).
+ */
+async function fetchProfile(
+  username: string,
+  endpoint: string,
+  session: string,
+  debug: Record<string, unknown>,
+): Promise<NormalizedFeed> {
+  const { cookies, wwwClaim } = await primeSession(session, debug)
+
+  // CSRF double-submit: the endpoint only checks the x-csrftoken header equals
+  // the csrftoken cookie. Prefer the primed cookie; self-issue one otherwise.
+  const csrfToken = cookies.csrftoken ?? randomCsrfToken()
+  cookies.csrftoken = csrfToken
+  const cookieHeader = Object.entries(cookies)
+    .map(([name, value]) => `${name}=${value}`)
+    .join('; ')
+
+  const startedAt = Date.now()
+  const res = await outboundFetch(
+    endpoint,
+    {
+      headers: {
+        'user-agent': USER_AGENT,
+        'x-ig-app-id': IG_APP_ID,
+        'x-asbd-id': IG_ASBD_ID,
+        'x-csrftoken': csrfToken,
+        'x-requested-with': 'XMLHttpRequest',
+        ...(wwwClaim ? { 'x-ig-www-claim': wwwClaim } : {}),
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
+        accept: '*/*',
+        'accept-language': 'en-US,en;q=0.9',
+        ...CLIENT_HINTS,
+        'sec-fetch-site': 'same-origin',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-dest': 'empty',
+        referer: `https://www.instagram.com/${username}/`,
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(15_000),
+    },
+    { session },
+  )
+  debug.durationMs = Date.now() - startedAt
+  debug.httpStatus = res.status
+  debug.contentType = res.headers.get('content-type') ?? ''
+  // Headers Instagram sets when throttling or challenging a client — the
+  // clearest signal of whether a failure is IP-level blocking vs. a bad handle.
+  debug.responseHeaders = pickHeaders(res.headers, [
+    'retry-after',
+    'x-ratelimit-remaining',
+    'www-authenticate',
+    'x-fb-rlafr',
+    'location',
+  ])
+
+  if (res.status === 404) {
+    throw new Error(`Instagram profile @${username} not found`)
+  }
+  if (!res.ok) {
+    // 401/403/429/5xx — usually a burned exit IP; a retry on a new IP recovers.
+    throw new RetryableFetchError(
+      `Instagram responded with ${res.status} — likely rate-limited or blocked, try again later`,
+    )
+  }
+
+  const contentType = res.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    throw new RetryableFetchError(
+      'Instagram returned a non-JSON response (probably a login wall) — try again later',
+    )
+  }
+
+  const body = (await res.json()) as {
+    data?: {
+      user?: {
+        is_private?: boolean
+        profile_pic_url?: string
+        profile_pic_url_hd?: string
+        edge_owner_to_timeline_media?: { edges?: Array<{ node: IgTimelineMedia }> }
+      }
+    }
+  }
+
+  const user = body.data?.user
+  if (!user) {
+    throw new Error(`Instagram profile @${username} not found`)
+  }
+  if (user.is_private) {
+    throw new Error(`Instagram profile @${username} is private — only public profiles can be converted`)
+  }
+
+  // Prefer the HD avatar; both are signed CDN URLs the refresh layer mirrors.
+  const profileImageUrl = user.profile_pic_url_hd ?? user.profile_pic_url
+  debug.hasProfileImage = Boolean(profileImageUrl)
+
+  const edges = user.edge_owner_to_timeline_media?.edges ?? []
+  debug.itemCount = edges.length
+  return {
+    items: edges.map(({ node }) => toItem(node, username)),
+    profile: profileImageUrl ? { imageUrl: profileImageUrl } : undefined,
+  }
+}
+
 export const instagramAdapter: SourceAdapter = {
   type: 'instagram',
 
@@ -152,7 +274,11 @@ export const instagramAdapter: SourceAdapter = {
     return `https://www.instagram.com/${(source.handle ?? '').trim().replace(/^@/, '')}/`
   },
 
-  async fetchItems(source: Source, debug: Record<string, unknown> = {}): Promise<NormalizedFeed> {
+  async fetchItems(
+    source: Source,
+    debug: Record<string, unknown> = {},
+    maxAttempts = 1,
+  ): Promise<NormalizedFeed> {
     const proxy = proxyEndpoint()
     debug.proxied = proxy !== null
     debug.proxy = proxy ?? 'direct'
@@ -165,99 +291,39 @@ export const instagramAdapter: SourceAdapter = {
     const endpoint = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`
     debug.endpoint = endpoint
 
-    // One sticky proxy session shared by the prime and the profile request so
-    // both leave from the same IP (a no-op when the proxy isn't session-aware).
-    // Keyed on the source so a source always uses its own session/IP and two
-    // sources refreshed at once never collide on one IP (Instagram 401s that).
-    const session = sessionForSource(source.id)
-    const { cookies, wwwClaim } = await primeSession(session, debug)
-
-    // CSRF double-submit: the endpoint only checks the x-csrftoken header equals
-    // the csrftoken cookie. Prefer the primed cookie; self-issue one otherwise.
-    const csrfToken = cookies.csrftoken ?? randomCsrfToken()
-    cookies.csrftoken = csrfToken
-    const cookieHeader = Object.entries(cookies)
-      .map(([name, value]) => `${name}=${value}`)
-      .join('; ')
-
-    const startedAt = Date.now()
-    const res = await outboundFetch(
-      endpoint,
-      {
-        headers: {
-          'user-agent': USER_AGENT,
-          'x-ig-app-id': IG_APP_ID,
-          'x-asbd-id': IG_ASBD_ID,
-          'x-csrftoken': csrfToken,
-          'x-requested-with': 'XMLHttpRequest',
-          ...(wwwClaim ? { 'x-ig-www-claim': wwwClaim } : {}),
-          ...(cookieHeader ? { cookie: cookieHeader } : {}),
-          accept: '*/*',
-          'accept-language': 'en-US,en;q=0.9',
-          ...CLIENT_HINTS,
-          'sec-fetch-site': 'same-origin',
-          'sec-fetch-mode': 'cors',
-          'sec-fetch-dest': 'empty',
-          referer: `https://www.instagram.com/${username}/`,
-        },
-        redirect: 'follow',
-        signal: AbortSignal.timeout(15_000),
-      },
-      { session },
-    )
-    debug.durationMs = Date.now() - startedAt
-    debug.httpStatus = res.status
-    debug.contentType = res.headers.get('content-type') ?? ''
-    // Headers Instagram sets when throttling or challenging a client — the
-    // clearest signal of whether a failure is IP-level blocking vs. a bad handle.
-    debug.responseHeaders = pickHeaders(res.headers, [
-      'retry-after',
-      'x-ratelimit-remaining',
-      'www-authenticate',
-      'x-fb-rlafr',
-      'location',
-    ])
-
-    if (res.status === 404) {
-      throw new Error(`Instagram profile @${username} not found`)
-    }
-    if (!res.ok) {
-      throw new Error(`Instagram responded with ${res.status} — likely rate-limited or blocked, try again later`)
-    }
-
-    const contentType = res.headers.get('content-type') ?? ''
-    if (!contentType.includes('application/json')) {
-      throw new Error('Instagram returned a non-JSON response (probably a login wall) — try again later')
-    }
-
-    const body = (await res.json()) as {
-      data?: {
-        user?: {
-          is_private?: boolean
-          profile_pic_url?: string
-          profile_pic_url_hd?: string
-          edge_owner_to_timeline_media?: { edges?: Array<{ node: IgTimelineMedia }> }
-        }
+    // Instagram 401s a fraction of residential-proxy exit IPs no matter how
+    // well-formed the request is, so a failed fetch is usually just a bad IP.
+    // Retry up to maxAttempts, rotating the proxy session — and thus the exit
+    // IP — each time. Attempt 1 keeps the source's own sticky session so the
+    // cookie-prime and the profile request leave from one IP; retries take a
+    // fresh random session (a no-op when the proxy isn't session-aware).
+    const attempts = Math.max(1, maxAttempts)
+    // One record per attempt, surfaced so the refresh layer can log each try as
+    // its own request (retries count as regular requests in the health trend).
+    const attemptLog: AttemptRecord[] = []
+    debug.attempts = attemptLog
+    let lastError: unknown
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      // Clear so a stale value from a prior attempt can't leak into this one's
+      // record if this attempt fails before the profile request runs.
+      debug.httpStatus = null
+      debug.durationMs = null
+      const session = attempt === 1 ? sessionForSource(source.id) : randomSessionId()
+      try {
+        const feed = await fetchProfile(username, endpoint, session, debug)
+        attemptLog.push({ status: 'success', ...attemptMeta(debug), error: null })
+        return feed
+      } catch (err) {
+        attemptLog.push({
+          status: 'error',
+          ...attemptMeta(debug),
+          error: err instanceof Error ? err.message : String(err),
+        })
+        lastError = err
+        if (err instanceof RetryableFetchError && attempt < attempts) continue
+        throw err
       }
     }
-
-    const user = body.data?.user
-    if (!user) {
-      throw new Error(`Instagram profile @${username} not found`)
-    }
-    if (user.is_private) {
-      throw new Error(`Instagram profile @${username} is private — only public profiles can be converted`)
-    }
-
-    // Prefer the HD avatar; both are signed CDN URLs the refresh layer mirrors.
-    const profileImageUrl = user.profile_pic_url_hd ?? user.profile_pic_url
-    debug.hasProfileImage = Boolean(profileImageUrl)
-
-    const edges = user.edge_owner_to_timeline_media?.edges ?? []
-    debug.itemCount = edges.length
-    return {
-      items: edges.map(({ node }) => toItem(node, username)),
-      profile: profileImageUrl ? { imageUrl: profileImageUrl } : undefined,
-    }
+    throw lastError
   },
 }

@@ -1,8 +1,9 @@
 import type { Payload } from 'payload'
 
 import { getAdapter } from '@/adapters/registry'
-import type { NormalizedItem } from '@/adapters/types'
+import type { AttemptRecord, NormalizedItem } from '@/adapters/types'
 import { escapeHtml } from '@/lib/html'
+import { getMaxFetchAttempts } from '@/lib/limits'
 import { outboundFetch } from '@/lib/proxy'
 import { relationId } from '@/lib/relations'
 import { isPublicS3Url, publicS3Url, s3Enabled } from '@/lib/s3'
@@ -31,7 +32,10 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
   let result: RefreshResult
   let profileFields: ProfileImageFields = {}
   try {
-    const { items, profile } = await getAdapter(source.type).fetchItems(source, debug)
+    // Each failed attempt retries on a fresh proxy IP (see the Instagram
+    // adapter); the admin-configured cap bounds how many times.
+    const maxAttempts = await getMaxFetchAttempts(payload)
+    const { items, profile } = await getAdapter(source.type).fetchItems(source, debug, maxAttempts)
     await storeItems(payload, source, items)
     // Mirror the account's profile picture into our bucket (see resolveProfileImage).
     profileFields = await resolveProfileImage(payload, source, profile?.imageUrl, true)
@@ -276,23 +280,38 @@ export async function recordFetchOutcome(
     context: { skipSourceRefresh: true },
   })
 
-  // Append a request-log row for the trend chart / per-source health bar. This
+  // Append request-log rows for the trend chart / per-source health bar. This
   // is history (the source fields above only hold the latest outcome), pruned
-  // after a week. Never let logging break a fetch — refreshSource is contracted
-  // not to throw.
+  // after a week. When the adapter retried, it reports one record per attempt
+  // (debug.attempts) and we log each as its own request so retries count toward
+  // the health trend like any other; otherwise we fall back to a single row
+  // from the final outcome. Never let logging break a fetch — refreshSource is
+  // contracted not to throw.
   try {
+    const source = typeof sourceId === 'string' ? Number(sourceId) : sourceId
     const debug = (result.debug ?? {}) as Record<string, unknown>
-    await payload.create({
-      collection: 'request-logs',
-      data: {
-        source: typeof sourceId === 'string' ? Number(sourceId) : sourceId,
-        status: result.status,
-        error: result.error ?? null,
-        httpStatus: typeof debug.httpStatus === 'number' ? debug.httpStatus : null,
-        durationMs: typeof debug.durationMs === 'number' ? debug.durationMs : null,
-      },
-      depth: 0,
-    })
+    const attempts = Array.isArray(debug.attempts) ? (debug.attempts as AttemptRecord[]) : []
+    const rows =
+      attempts.length > 0
+        ? attempts.map((a) => ({
+            source,
+            status: a.status,
+            error: a.error ?? null,
+            httpStatus: typeof a.httpStatus === 'number' ? a.httpStatus : null,
+            durationMs: typeof a.durationMs === 'number' ? a.durationMs : null,
+          }))
+        : [
+            {
+              source,
+              status: result.status,
+              error: result.error ?? null,
+              httpStatus: typeof debug.httpStatus === 'number' ? debug.httpStatus : null,
+              durationMs: typeof debug.durationMs === 'number' ? debug.durationMs : null,
+            },
+          ]
+    for (const data of rows) {
+      await payload.create({ collection: 'request-logs', data, depth: 0 })
+    }
   } catch (err) {
     payload.logger.warn(`Could not write request log for source ${sourceId}: ${describeError(err)}`)
   }

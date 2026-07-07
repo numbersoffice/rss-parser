@@ -39,6 +39,18 @@ export interface NormalizedFeed {
 }
 
 /**
+ * The outcome of a single fetch attempt. An adapter that retries surfaces one
+ * of these per try (on `debug.attempts`) so the refresh layer can record each
+ * attempt as its own request log — retries then count as regular requests.
+ */
+export interface AttemptRecord {
+  status: 'success' | 'error'
+  httpStatus: number | null
+  durationMs: number | null
+  error: string | null
+}
+
+/**
  * The extension point of the platform. To support a new source type:
  *
  *   1. Create `src/adapters/<type>.ts` implementing this interface.
@@ -54,8 +66,13 @@ export interface SourceAdapter {
    * error on the source and keeps serving cached items. Record
    * request/response metadata (status, timing, headers) into `debug` as it
    * becomes available — it is stored on the source for troubleshooting even
-   * when the fetch throws. */
-  fetchItems(source: Source, debug?: Record<string, unknown>): Promise<NormalizedFeed>
+   * when the fetch throws. `maxAttempts` (default 1) bounds retries for
+   * transient, IP-level blocks; each retry should rotate the proxy exit IP. */
+  fetchItems(
+    source: Source,
+    debug?: Record<string, unknown>,
+    maxAttempts?: number,
+  ): Promise<NormalizedFeed>
   /** Link to the account/page on the source platform, used as the RSS channel link. */
   sourceUrl?(source: Source): string
 }

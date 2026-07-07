@@ -28,5 +28,16 @@ export const Settings: GlobalConfig = {
           'How many subscriptions a regular user may have. Lowering it below what a user already has keeps their existing subscriptions but blocks new ones until they are back under the limit. Admins are not limited.',
       },
     },
+    {
+      name: 'maxFetchAttempts',
+      type: 'number',
+      required: true,
+      defaultValue: 3,
+      min: 1,
+      admin: {
+        description:
+          'How many times to try fetching a source before giving up. Instagram returns 401 from a fraction of residential-proxy IPs, so each retry rotates to a fresh IP — 2–3 attempts recovers most transient blocks. Set to 1 to disable retrying.',
+      },
+    },
   ],
 }
