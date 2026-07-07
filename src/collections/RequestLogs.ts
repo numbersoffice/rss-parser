@@ -40,6 +40,16 @@ export const RequestLogs: CollectionConfig = {
       admin: { readOnly: true },
     },
     {
+      name: 'fetchId',
+      type: 'text',
+      index: true,
+      admin: {
+        readOnly: true,
+        description:
+          'Groups the attempts of one refresh: a fetch that retries writes one row per attempt, all sharing this id, so the health readout can collapse them into a single session.',
+      },
+    },
+    {
       name: 'status',
       type: 'select',
       options: ['success', 'error'],

@@ -285,16 +285,19 @@ export async function recordFetchOutcome(
   // after a week. When the adapter retried, it reports one record per attempt
   // (debug.attempts) and we log each as its own request so retries count toward
   // the health trend like any other; otherwise we fall back to a single row
-  // from the final outcome. Never let logging break a fetch — refreshSource is
-  // contracted not to throw.
+  // from the final outcome. Every row from this one refresh shares a `fetchId`
+  // so the health readout can group the retries back into a single session.
+  // Never let logging break a fetch — refreshSource is contracted not to throw.
   try {
     const source = typeof sourceId === 'string' ? Number(sourceId) : sourceId
+    const fetchId = crypto.randomUUID()
     const debug = (result.debug ?? {}) as Record<string, unknown>
     const attempts = Array.isArray(debug.attempts) ? (debug.attempts as AttemptRecord[]) : []
     const rows =
       attempts.length > 0
         ? attempts.map((a) => ({
             source,
+            fetchId,
             status: a.status,
             error: a.error ?? null,
             httpStatus: typeof a.httpStatus === 'number' ? a.httpStatus : null,
@@ -303,6 +306,7 @@ export async function recordFetchOutcome(
         : [
             {
               source,
+              fetchId,
               status: result.status,
               error: result.error ?? null,
               httpStatus: typeof debug.httpStatus === 'number' ? debug.httpStatus : null,

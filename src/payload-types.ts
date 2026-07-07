@@ -319,6 +319,10 @@ export interface FeedItem {
 export interface RequestLog {
   id: number;
   source?: (number | null) | Source;
+  /**
+   * Groups the attempts of one refresh: a fetch that retries writes one row per attempt, all sharing this id, so the health readout can collapse them into a single session.
+   */
+  fetchId?: string | null;
   status?: ('success' | 'error') | null;
   error?: string | null;
   /**
@@ -618,6 +622,7 @@ export interface UsersSelect<T extends boolean = true> {
  */
 export interface RequestLogsSelect<T extends boolean = true> {
   source?: T;
+  fetchId?: T;
   status?: T;
   error?: T;
   httpStatus?: T;

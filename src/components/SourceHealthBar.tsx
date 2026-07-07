@@ -9,7 +9,13 @@ const SESSION_COUNT = 5
 /** Fallback when the settings global can't be read — mirrors DEFAULT_MAX_FETCH_ATTEMPTS. */
 const DEFAULT_MAX_ATTEMPTS = 3
 
-type Attempt = { id: number | string; status: 'success' | 'error'; createdAt: string; error?: string | null }
+type Attempt = {
+  id: number | string
+  status: 'success' | 'error'
+  createdAt: string
+  error?: string | null
+  fetchId?: string | null
+}
 
 /** A fetch session: one refresh's worth of attempts (retries), collapsed to a
  * single dot — healthy if any attempt in it succeeded. */
@@ -20,10 +26,10 @@ type Session = { attempts: Attempt[]; status: 'success' | 'error'; createdAt: st
  * few *fetch sessions*, oldest → newest, green when the session ultimately
  * succeeded and red when every retry failed. A refresh may retry on a fresh
  * proxy IP up to Settings.maxFetchAttempts times, writing one request-log row
- * per attempt; we group those attempts back into sessions so each dot is one
- * refresh, not one attempt. The row count we fetch is sized from the retry cap
- * (SESSION_COUNT + 1 sessions × attempts each) so a full 5 sessions survive even
- * if every one exhausted its retries — overfetching slightly is fine.
+ * per attempt — all sharing a `fetchId` — so we group by that id to collapse a
+ * refresh's retries into one dot. The row count we fetch is sized from the retry
+ * cap (SESSION_COUNT + 1 sessions × attempts each) so a full 5 sessions survive
+ * even if every one exhausted its retries — overfetching slightly is fine.
  */
 export const SourceHealthBar: React.FC = () => {
   const { id } = useDocumentInfo()
@@ -115,24 +121,35 @@ async function fetchMaxAttempts(serverURL: string, api: string, signal: AbortSig
 }
 
 /**
- * Fold a chronological (oldest → newest) list of attempts into sessions. The
- * adapter stops retrying on the first success and after maxAttempts failures,
- * so a session is a run of attempts that ends at either a success or the
- * maxAttempts-th attempt. A session is healthy if any of its attempts succeeded.
+ * Fold a chronological (oldest → newest) list of attempts into sessions. Every
+ * attempt of one refresh shares a `fetchId`, so consecutive rows with the same
+ * id are one session. Legacy rows written before fetchId existed have none; for
+ * those we fall back to the shape of a retry run — the adapter stops on the
+ * first success and after maxAttempts failures, so a session ends at a success
+ * or the maxAttempts-th attempt. A session is healthy if any attempt succeeded.
  */
 function groupSessions(attempts: Attempt[], maxAttempts: number): Session[] {
   const sessions: Session[] = []
   let current: Attempt[] = []
-  for (const attempt of attempts) {
-    current.push(attempt)
-    if (attempt.status === 'success' || current.length >= maxAttempts) {
+  const flush = () => {
+    if (current.length > 0) {
       sessions.push(toSession(current))
       current = []
     }
   }
-  // Trailing attempts that didn't hit a boundary (a session still in flight, or
-  // one cut short by the fetch window) — surface them as their own dot.
-  if (current.length > 0) sessions.push(toSession(current))
+  for (const attempt of attempts) {
+    // A different fetchId means a new refresh started — close the previous one.
+    const prev = current[current.length - 1]
+    if (prev && (prev.fetchId ?? null) !== (attempt.fetchId ?? null)) flush()
+    current.push(attempt)
+
+    if (attempt.fetchId) continue // grouped by id; boundary is the next id change
+    // Legacy rows (no fetchId): infer the boundary from the retry shape.
+    if (attempt.status === 'success' || current.length >= maxAttempts) flush()
+  }
+  // Trailing attempts (a session still in flight, or cut short by the fetch
+  // window) — surface them as their own dot.
+  flush()
   return sessions
 }
 

@@ -6,6 +6,7 @@ import * as migration_20260705_010847_add_source_profile_image from './20260705_
 import * as migration_20260705_212159_add_user_verification from './20260705_212159_add_user_verification';
 import * as migration_20260707_170141_add_request_logs from './20260707_170141_add_request_logs';
 import * as migration_20260707_175302_add_max_fetch_attempts from './20260707_175302_add_max_fetch_attempts';
+import * as migration_20260707_190000_add_request_log_fetch_id from './20260707_190000_add_request_log_fetch_id';
 
 export const migrations = [
   {
@@ -47,5 +48,10 @@ export const migrations = [
     up: migration_20260707_175302_add_max_fetch_attempts.up,
     down: migration_20260707_175302_add_max_fetch_attempts.down,
     name: '20260707_175302_add_max_fetch_attempts',
+  },
+  {
+    up: migration_20260707_190000_add_request_log_fetch_id.up,
+    down: migration_20260707_190000_add_request_log_fetch_id.down,
+    name: '20260707_190000_add_request_log_fetch_id',
   },
 ];
