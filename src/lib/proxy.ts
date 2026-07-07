@@ -70,6 +70,16 @@ export function randomSessionId(): string {
   return Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 10)
 }
 
+/**
+ * A stable sticky-session id for a source, so every fetch for that source leaves
+ * from the same proxy session/IP and two sources refreshed at once never share
+ * one (which is what triggers Instagram's per-IP 401s). Alphanumeric, so it's
+ * safe inside the proxy username where Decodo carries the session token.
+ */
+export function sessionForSource(id: string | number): string {
+  return `src${id}`
+}
+
 /** The proxy host:port currently in use, with any credentials and the session
  * placeholder stripped, or null when running direct. Safe to store/display —
  * never exposes the username or password embedded in OUTBOUND_PROXY_URL. */

@@ -1,7 +1,7 @@
 import type { NormalizedFeed, NormalizedItem, SourceAdapter } from './types'
 import type { Source } from '@/payload-types'
 import { escapeHtml } from '@/lib/html'
-import { outboundFetch, proxyEndpoint, randomSessionId } from '@/lib/proxy'
+import { outboundFetch, proxyEndpoint, randomSessionId, sessionForSource } from '@/lib/proxy'
 
 /**
  * Fetches public Instagram profiles via Instagram's own web API — the same
@@ -167,7 +167,9 @@ export const instagramAdapter: SourceAdapter = {
 
     // One sticky proxy session shared by the prime and the profile request so
     // both leave from the same IP (a no-op when the proxy isn't session-aware).
-    const session = randomSessionId()
+    // Keyed on the source so a source always uses its own session/IP and two
+    // sources refreshed at once never collide on one IP (Instagram 401s that).
+    const session = sessionForSource(source.id)
     const { cookies, wwwClaim } = await primeSession(session, debug)
 
     // CSRF double-submit: the endpoint only checks the x-csrftoken header equals
