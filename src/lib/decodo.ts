@@ -8,10 +8,10 @@
  * NOT `outboundFetch`: an app-internal status call must never be routed through
  * (and billed against) the residential proxy.
  *
- * Auth is Decodo's key scheme: `Authorization: Basic <API key>` (the key from
- * the dashboard is sent verbatim, no extra base64). The v2 subscriptions
- * endpoint — `GET /v2/subscriptions` — is scoped to the account behind the API
- * key alone, so no account/user id is needed.
+ * Auth is Decodo's key scheme: the dashboard API key goes in the `Authorization`
+ * header verbatim — no `Basic`/`Bearer` prefix, no base64 (any prefix 401s). The
+ * v2 subscriptions endpoint — `GET /v2/subscriptions` — is scoped to the account
+ * behind the API key alone, so no account/user id is needed.
  *
  * Config is read from the env directly (matching proxy.ts / limits.ts — the
  * project has no env-validation layer). Everything degrades to `null` when
@@ -36,9 +36,12 @@ export interface DecodoUsage {
 }
 
 /** Shape of the fields we read off Decodo's subscription response. Decodo
- * returns the traffic figures as strings. */
+ * returns the traffic figures as strings. The v2 endpoint reports cycle usage
+ * as `traffic`; older docs/responses call it `traffic_per_period`, so we accept
+ * either. */
 interface DecodoSubscription {
   traffic_limit?: string | number
+  traffic?: string | number
   traffic_per_period?: string | number
   valid_until?: string | null
 }
@@ -55,7 +58,7 @@ export async function getDecodoUsage(): Promise<DecodoUsage | null> {
   try {
     const res = await fetch(`${API_BASE}/subscriptions`, {
       headers: {
-        Authorization: `Basic ${apiKey}`,
+        Authorization: apiKey,
         Accept: 'application/json',
       },
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -71,7 +74,7 @@ export async function getDecodoUsage(): Promise<DecodoUsage | null> {
     if (!sub) return null
 
     const limitGb = Number(sub.traffic_limit)
-    const usedGb = Number(sub.traffic_per_period)
+    const usedGb = Number(sub.traffic ?? sub.traffic_per_period)
     if (!Number.isFinite(limitGb) || !Number.isFinite(usedGb)) {
       console.error('[decodo] usage response missing numeric traffic fields')
       return null
