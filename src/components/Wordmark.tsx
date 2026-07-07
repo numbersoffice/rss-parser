@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import React from 'react'
 
 /**
@@ -18,9 +19,9 @@ export function Wordmark({ className }: { className?: string }) {
 /** Registered as admin.components.graphics.Logo in payload.config.ts. */
 export function LoginLogo() {
   return (
-    <a className="wordmark-link" href="/">
+    <Link className="wordmark-link" href="/">
       <Wordmark className="login-wordmark" />
-    </a>
+    </Link>
   )
 }
 

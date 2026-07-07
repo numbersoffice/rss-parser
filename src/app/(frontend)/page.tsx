@@ -1,4 +1,5 @@
 import { headers as getHeaders } from 'next/headers.js'
+import Link from 'next/link'
 import { getPayload } from 'payload'
 import React from 'react'
 
@@ -64,9 +65,9 @@ export default async function HomePage() {
   return (
     <div className="page">
       <header className="masthead">
-        <a className="wordmark-link" href="/">
+        <Link className="wordmark-link" href="/">
           <Wordmark />
-        </a>
+        </Link>
         <span className="masthead-meta">
           <a href="https://github.com/numbersoffice/rss-parser/tree/main">github</a>
         </span>
@@ -93,7 +94,7 @@ export default async function HomePage() {
             <a className="cta" href={payloadConfig.routes.admin}>
               log in →
             </a>
-            <a className="cta" href="/admin/register">
+            <a className="cta" href={`${payloadConfig.routes.admin}/register`}>
               create an account →
             </a>
           </p>

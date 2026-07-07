@@ -50,6 +50,9 @@ function CaptchaField({ apiRoute }: { apiRoute: string }) {
   }, [apiRoute, setToken])
 
   useEffect(() => {
+    // load() only setStates after an awaited fetch, so this is an async data
+    // load on mount, not the synchronous cascading render the rule guards against.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
   }, [load])
 

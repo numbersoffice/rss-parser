@@ -1,5 +1,6 @@
 import config from '@payload-config'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import React from 'react'
@@ -69,9 +70,9 @@ export default async function FeedLandingPage({ params }: { params: Promise<Para
   return (
     <div className="page">
       <header className="masthead">
-        <a className="wordmark-link" href="/">
+        <Link className="wordmark-link" href="/">
           <Wordmark />
-        </a>
+        </Link>
         <span className="masthead-meta">
           <a href="https://github.com/numbersoffice/rss-parser/tree/main">github</a>
         </span>
