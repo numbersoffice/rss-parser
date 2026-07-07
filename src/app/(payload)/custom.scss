@@ -194,19 +194,106 @@ html[data-theme='dark'] {
   transform: none;
 }
 
-/* Residential data usage widget (src/components/DataUsageWidget.tsx): remaining
-   Decodo proxy GB. Shares the .subs-widget card + type + button classes; only
-   the bits below differ. */
+/* Residential data usage widget (src/components/DataUsageWidget.tsx): Decodo
+   proxy GB for the billing cycle. A system-admin readout — same card frame as
+   .subs-widget (padding / bg / border) but a compact, detail-dense layout
+   instead of the big number + CTA button. */
 .usage-widget {
-  /* the "unavailable" fallback has no big number, so top-align its single
-     label block instead of the count/label baseline row */
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--base) / 2);
+  height: 100%;
+  padding: var(--base);
+  background: var(--theme-elevation-50);
+  border: 1px solid var(--theme-elevation-150);
+}
+
+.usage-widget__header {
+  display: flex;
+  align-items: baseline;
   justify-content: space-between;
+  gap: var(--base);
+}
+
+.usage-widget__title {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+/* inconspicuous text link over to the Decodo dashboard — no button chrome */
+.usage-widget__link {
+  color: var(--theme-elevation-500);
+  font-size: 0.8rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.usage-widget__link:hover,
+.usage-widget__link:focus-visible {
+  color: var(--theme-text);
+  text-decoration: underline;
+}
+
+/* thin usage bar; the fill width is set inline from percent-used */
+.usage-widget__meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--theme-elevation-150);
+  overflow: hidden;
+}
+
+.usage-widget__meter-fill {
+  height: 100%;
+  min-width: 2px;
+  background: var(--accent);
+}
+
+.usage-widget__caption {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--theme-elevation-500);
+}
+
+/* two-column grid of labelled figures */
+.usage-widget__stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: calc(var(--base) / 2) var(--base);
+  margin: calc(var(--base) / 4) 0 0;
+}
+
+.usage-widget__stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.usage-widget__stats dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--theme-elevation-500);
+}
+
+.usage-widget__stats dd {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "usage unavailable" fallback text */
+.usage-widget__empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--theme-elevation-500);
 }
 
 /* env-var names called out in the "usage unavailable" state */
 .usage-widget code {
   font-family: var(--font-mono);
-  /* nudge down from the sublabel size so the names read as inline tokens */
+  /* nudge down from the surrounding size so the names read as inline tokens */
   font-size: 0.95em;
   color: var(--theme-elevation-700);
 }
