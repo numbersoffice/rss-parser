@@ -42,7 +42,7 @@ export async function DataUsageWidget(props: WidgetServerProps) {
           <span className="subs-widget__label">
             Usage unavailable
             <span className="subs-widget__sublabel">
-              Set <code>DECODO_API_KEY</code> and <code>DECODO_USER_ID</code> to show remaining GB.
+              Set <code>DECODO_API_KEY</code> to show remaining GB.
             </span>
           </span>
         </div>

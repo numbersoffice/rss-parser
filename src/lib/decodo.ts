@@ -8,10 +8,10 @@
  * NOT `outboundFetch`: an app-internal status call must never be routed through
  * (and billed against) the residential proxy.
  *
- * Auth is Decodo's key/token scheme: `Authorization: Basic <API key>` (the key
- * from the dashboard is sent verbatim, no extra base64). The subscriptions
- * endpoint is scoped to an account id: `GET /users/{userId}/subscriptions`,
- * where the id sits next to the API key in the dashboard — hence DECODO_USER_ID.
+ * Auth is Decodo's key scheme: `Authorization: Basic <API key>` (the key from
+ * the dashboard is sent verbatim, no extra base64). The v2 subscriptions
+ * endpoint — `GET /v2/subscriptions` — is scoped to the account behind the API
+ * key alone, so no account/user id is needed.
  *
  * Config is read from the env directly (matching proxy.ts / limits.ts — the
  * project has no env-validation layer). Everything degrades to `null` when
@@ -19,7 +19,7 @@
  * missing, slow, or misconfigured.
  */
 
-const API_BASE = 'https://api.decodo.com/v1'
+const API_BASE = 'https://api.decodo.com/v2'
 const TIMEOUT_MS = 8000
 // Cache usage for 5 minutes so repeated dashboard loads don't hammer the API.
 const REVALIDATE_SECONDS = 300
@@ -52,14 +52,8 @@ export async function getDecodoUsage(): Promise<DecodoUsage | null> {
   const apiKey = process.env.DECODO_API_KEY
   if (!apiKey) return null
 
-  const userId = process.env.DECODO_USER_ID
-  // The documented endpoint is /users/{userId}/subscriptions. If the id isn't
-  // configured, still make a best-effort call to the userless form — some
-  // key-scoped accounts expose it — but the id is effectively required.
-  const path = userId ? `/users/${encodeURIComponent(userId)}/subscriptions` : '/subscriptions'
-
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${API_BASE}/subscriptions`, {
       headers: {
         Authorization: `Basic ${apiKey}`,
         Accept: 'application/json',
