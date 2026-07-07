@@ -15,13 +15,6 @@ import Link from 'next/link'
 import { email } from 'payload/shared'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 
-const initialState = {
-  captchaAnswer: { valid: true, value: '' },
-  captchaToken: { valid: true, value: '' },
-  email: { valid: true, value: '' },
-  password: { valid: true, value: '' },
-}
-
 const validatePassword = (value: unknown) =>
   (typeof value === 'string' && value.length >= 8 && value.length <= 128) ||
   'Password must be 8–128 characters.'
@@ -29,12 +22,14 @@ const validatePassword = (value: unknown) =>
 /**
  * Anti-bot question inside the register form. Holds the server-issued token in
  * the hidden captchaToken field and shows the question as the answer field's
- * label. Solved tokens are single-use and questions expire, so a fresh one is
- * fetched after every submit attempt.
+ * label. The first question+token is rendered server-side (seeded via props and
+ * initialState) so it's present on first paint — no mount fetch, no flash.
+ * Solved tokens are single-use and questions expire, so a fresh one is fetched
+ * from /api/captcha after every submit attempt.
  */
-function CaptchaField({ apiRoute }: { apiRoute: string }) {
+function CaptchaField({ apiRoute, initialQuestion }: { apiRoute: string; initialQuestion: string }) {
   const { setValue: setToken } = useField<string>({ path: 'captchaToken' })
-  const [question, setQuestion] = useState<string | null>(null)
+  const [question, setQuestion] = useState<string | null>(initialQuestion)
   const processing = useFormProcessing()
   const wasProcessing = useRef(false)
 
@@ -48,13 +43,6 @@ function CaptchaField({ apiRoute }: { apiRoute: string }) {
       setQuestion(null)
     }
   }, [apiRoute, setToken])
-
-  useEffect(() => {
-    // load() only setStates after an awaited fetch, so this is an async data
-    // load on mount, not the synchronous cascading render the rule guards against.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load()
-  }, [load])
 
   useEffect(() => {
     if (wasProcessing.current && !processing) {
@@ -75,7 +63,22 @@ function CaptchaField({ apiRoute }: { apiRoute: string }) {
   )
 }
 
-export function RegisterForm({ adminRoute, apiRoute }: { adminRoute: string; apiRoute: string }) {
+export function RegisterForm({
+  adminRoute,
+  apiRoute,
+  initialCaptcha,
+}: {
+  adminRoute: string
+  apiRoute: string
+  initialCaptcha: { question: string; token: string }
+}) {
+  const initialState = {
+    captchaAnswer: { valid: true, value: '' },
+    captchaToken: { valid: true, value: initialCaptcha.token },
+    email: { valid: true, value: '' },
+    password: { valid: true, value: '' },
+  }
+
   const onSuccess: FormProps['onSuccess'] = async (_json, ctx) => {
     // The new account is unverified, so we can't log in yet — send the visitor
     // to the "check your email" page until they click the verification link.
@@ -108,7 +111,7 @@ export function RegisterForm({ adminRoute, apiRoute }: { adminRoute: string; api
             path="password"
             validate={validatePassword}
           />
-          <CaptchaField apiRoute={apiRoute} />
+          <CaptchaField apiRoute={apiRoute} initialQuestion={initialCaptcha.question} />
         </div>
         <FormSubmit size="large">Create account</FormSubmit>
       </Form>

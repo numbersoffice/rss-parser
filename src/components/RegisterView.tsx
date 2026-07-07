@@ -4,6 +4,8 @@ import { MinimalTemplate } from '@payloadcms/next/templates'
 import { redirect } from 'next/navigation'
 import React from 'react'
 
+import { generateCaptcha } from '@/lib/captcha'
+
 import { RegisterForm } from './RegisterForm'
 import { LoginLogo } from './Wordmark'
 
@@ -22,12 +24,21 @@ export function RegisterView({ initPageResult }: AdminViewServerProps) {
     redirect(routes.admin)
   }
 
+  // Generate the first captcha server-side so the question is present in the
+  // initial paint — no client fetch on mount, no "loading…" → question flash.
+  // Fresh tokens after a submit are still fetched client-side via /api/captcha.
+  const initialCaptcha = generateCaptcha(req.payload.secret)
+
   return (
     <MinimalTemplate className="register">
       <div className="login__brand">
         <LoginLogo />
       </div>
-      <RegisterForm adminRoute={routes.admin} apiRoute={routes.api} />
+      <RegisterForm
+        adminRoute={routes.admin}
+        apiRoute={routes.api}
+        initialCaptcha={initialCaptcha}
+      />
     </MinimalTemplate>
   )
 }
