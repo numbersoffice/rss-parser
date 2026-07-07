@@ -304,6 +304,21 @@ html[data-theme='dark'] {
   overflow: visible;
 }
 
+/* the SVG only mounts once its box is measured (see FetchTrendChart); fade it
+   in on mount, kept very short so it reads as instant rather than an animation */
+.trend-chart__svg--ready {
+  animation: trend-chart-fade-in 120ms ease-out;
+}
+
+@keyframes trend-chart-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .trend-chart__baseline {
   stroke: var(--theme-elevation-150);
   stroke-width: 1;

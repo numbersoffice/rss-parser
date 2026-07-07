@@ -7,9 +7,6 @@ const PAD_X = 6
 const PAD_TOP = 6
 const PAD_BOTTOM = 16 // room for day labels
 const DOT_R = 2
-/** Floor so the chart is never uselessly short before it's measured / in a
- * short row; it grows past this to fill whatever height the widget has. */
-const MIN_H = 72
 
 export type TrendDay = { label: string; rate: number | null }
 
@@ -24,7 +21,7 @@ export type TrendDay = { label: string; rate: number | null }
  */
 export function FetchTrendChart({ days }: { days: TrendDay[] }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [size, setSize] = useState<{ w: number; h: number }>({ w: 300, h: MIN_H })
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null)
 
   useLayoutEffect(() => {
     const el = ref.current
@@ -36,12 +33,71 @@ export function FetchTrendChart({ days }: { days: TrendDay[] }) {
     return () => observer.disconnect()
   }, [])
 
-  const { w, h } = size
+  // Until we've measured the box we can't place anything without distorting it,
+  // so render just the (sized) container and fade the SVG in once we can.
+  const geometry = size ? computeGeometry(days, size) : null
+
+  return (
+    <div className="trend-chart" ref={ref}>
+      {size && geometry && (
+        <svg
+          className="trend-chart__svg trend-chart__svg--ready"
+          width={size.w}
+          height={size.h}
+          viewBox={`0 0 ${size.w} ${size.h}`}
+          role="img"
+          aria-label={`Daily fetch success rate over the last ${days.length} days`}
+        >
+          <line
+            className="trend-chart__baseline"
+            x1={PAD_X}
+            y1={geometry.baselineY}
+            x2={size.w - PAD_X}
+            y2={geometry.baselineY}
+          />
+
+          {geometry.segments.map((seg, i) => (
+            <polyline
+              key={i}
+              className="trend-chart__line"
+              points={seg.map((p) => `${p.x},${p.y}`).join(' ')}
+            />
+          ))}
+
+          {geometry.points.map((p, i) =>
+            p.y === null ? null : (
+              <circle key={i} className="trend-chart__dot" cx={p.x} cy={p.y} r={DOT_R} />
+            ),
+          )}
+
+          {geometry.points.map((p, i) => (
+            <text
+              key={i}
+              className="trend-chart__label"
+              x={p.x}
+              y={size.h - 4}
+              textAnchor="middle"
+            >
+              {p.label}
+            </text>
+          ))}
+        </svg>
+      )}
+    </div>
+  )
+}
+
+type Point = { label: string; x: number; y: number | null }
+
+/** Turn the measured box + daily rates into plot coordinates: one point per
+ * day (100% at top, 0% at the baseline) and contiguous line segments so days
+ * with no attempts break the line. */
+function computeGeometry(days: TrendDay[], { w, h }: { w: number; h: number }) {
   const innerW = w - PAD_X * 2
   const innerH = h - PAD_TOP - PAD_BOTTOM
   const step = days.length > 1 ? innerW / (days.length - 1) : 0
 
-  const points = days.map((d, i) => ({
+  const points: Point[] = days.map((d, i) => ({
     label: d.label,
     x: PAD_X + step * i,
     // rate 100% at top, 0% at bottom of the plot area
@@ -61,46 +117,5 @@ export function FetchTrendChart({ days }: { days: TrendDay[] }) {
   }
   if (run.length) segments.push(run)
 
-  const baselineY = PAD_TOP + innerH
-
-  return (
-    <div className="trend-chart" ref={ref}>
-      <svg
-        className="trend-chart__svg"
-        width={w}
-        height={h}
-        viewBox={`0 0 ${w} ${h}`}
-        role="img"
-        aria-label={`Daily fetch success rate over the last ${days.length} days`}
-      >
-        <line
-          className="trend-chart__baseline"
-          x1={PAD_X}
-          y1={baselineY}
-          x2={w - PAD_X}
-          y2={baselineY}
-        />
-
-        {segments.map((seg, i) => (
-          <polyline
-            key={i}
-            className="trend-chart__line"
-            points={seg.map((p) => `${p.x},${p.y}`).join(' ')}
-          />
-        ))}
-
-        {points.map((p, i) =>
-          p.y === null ? null : (
-            <circle key={i} className="trend-chart__dot" cx={p.x} cy={p.y} r={DOT_R} />
-          ),
-        )}
-
-        {points.map((p, i) => (
-          <text key={i} className="trend-chart__label" x={p.x} y={h - 4} textAnchor="middle">
-            {p.label}
-          </text>
-        ))}
-      </svg>
-    </div>
-  )
+  return { points, segments, baselineY: PAD_TOP + innerH }
 }
