@@ -320,8 +320,22 @@ html[data-theme='dark'] {
   font-size: 9px;
 }
 
-/* per-source health strip: last few fetch attempts as coloured dots
-   (src/components/SourceHealthBar.tsx), shown on the source edit view */
+/* per-source health strip: last few fetch sessions as coloured dots
+   (src/components/SourceHealthBar.tsx), shown inline in the document header bar */
+.source-health {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-right: calc(var(--base) / 2);
+}
+
+.source-health__caption {
+  font-size: 0.7rem;
+  color: var(--theme-elevation-450);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .source-health__dots {
   display: flex;
   gap: 0.35rem;

@@ -20,6 +20,14 @@ export const Sources: CollectionConfig = {
     defaultColumns: ['name', 'type', 'handle', 'enabled', 'lastFetchStatus', 'lastFetchedAt'],
     description:
       'Shared, one per followed account — created and removed automatically as users subscribe',
+    components: {
+      edit: {
+        // Recent-fetch health dots live in the document header bar, next to the
+        // save controls — an at-a-glance readout that's visible without opening
+        // the collapsed "Last fetch" group.
+        beforeDocumentControls: ['@/components/SourceHealthBar#SourceHealthBar'],
+      },
+    },
   },
   access: {
     // Authenticated read so the source relationship on subscriptions can populate.
@@ -114,15 +122,6 @@ export const Sources: CollectionConfig = {
       label: 'Last fetch',
       admin: { initCollapsed: true },
       fields: [
-        {
-          name: 'health',
-          type: 'ui',
-          admin: {
-            components: {
-              Field: '@/components/SourceHealthBar#SourceHealthBar',
-            },
-          },
-        },
         {
           name: 'lastFetchedAt',
           type: 'date',
