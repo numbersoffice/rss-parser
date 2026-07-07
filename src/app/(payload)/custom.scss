@@ -67,10 +67,6 @@ html[data-theme='dark'] {
 /* Subscriptions overview dashboard widget (src/components/SubscriptionsWidget.tsx):
    a static card with an explicit "View all" link and a create shortcut. */
 .subs-widget {
-  /* one multiplier scales every font in the widget; bumped up on small
-     screens (below) so the card stays readable on mobile. 1 = unchanged. */
-  --subs-fs: 1;
-
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -88,7 +84,7 @@ html[data-theme='dark'] {
 }
 
 .subs-widget__count {
-  font-size: calc(3rem * var(--subs-fs));
+  font-size: 3rem;
   font-weight: 700;
   line-height: 1;
 }
@@ -96,14 +92,12 @@ html[data-theme='dark'] {
 .subs-widget__label {
   display: flex;
   flex-direction: column;
-  /* 1em keeps the default identical; the multiplier scales it on mobile */
-  font-size: calc(1em * var(--subs-fs));
   font-weight: 700;
 }
 
 .subs-widget__sublabel {
   font-weight: 400;
-  font-size: calc(0.85rem * var(--subs-fs));
+  font-size: 0.85rem;
   color: var(--theme-elevation-500);
 }
 
@@ -116,7 +110,7 @@ html[data-theme='dark'] {
 /* same hover behavior as the breadcrumb "Home" link: underline appears on hover */
 .subs-widget__view-all {
   color: var(--theme-text);
-  font-size: calc(0.85rem * var(--subs-fs));
+  font-size: 0.85rem;
   font-weight: 700;
   text-decoration: none;
 }
@@ -139,7 +133,7 @@ html[data-theme='dark'] {
   color: var(--theme-text);
   box-shadow: 2px 2px 0 var(--accent);
   text-decoration: none;
-  font-size: calc(0.85rem * var(--subs-fs));
+  font-size: 0.85rem;
   font-weight: 700;
 }
 
@@ -167,17 +161,9 @@ html[data-theme='dark'] {
 
 /* muted count shown next to the big number when the user has a limit */
 .subs-widget__limit {
-  font-size: calc(1.5rem * var(--subs-fs));
+  font-size: 1.5rem;
   font-weight: 400;
   color: var(--theme-elevation-500);
-}
-
-/* on small screens the widget spans the full width but its fonts stay tuned
-   for a narrow column — scale every font in the card up so it's readable */
-@media (max-width: 768px) {
-  .subs-widget {
-    --subs-fs: 1.35;
-  }
 }
 
 /* create shortcut at the subscription limit: grayed out, no press effect */
