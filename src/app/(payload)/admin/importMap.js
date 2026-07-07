@@ -14,6 +14,7 @@ import { RegisterView as RegisterView_e6e9c13a362da938250f046cf5d57093 } from '.
 import { VerifyPendingView as VerifyPendingView_7f41720bd58053ec6dd634fcea5cc9d0 } from '../../../components/VerifyPendingView'
 import { SubscriptionsWidget as SubscriptionsWidget_2abd24e0b948c3658f0e029740d2c554 } from '../../../components/SubscriptionsWidget'
 import { DataUsageWidget as DataUsageWidget_ed39dcc1fcd865b21f77495b978bbf91 } from '../../../components/DataUsageWidget'
+import { FetchErrorsWidget as FetchErrorsWidget_28581a3020e3c07dc0fad3a52cbbf101 } from '../../../components/FetchErrorsWidget'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
 /** @type import('payload').ImportMap */
@@ -34,5 +35,6 @@ export const importMap = {
   "/components/VerifyPendingView#VerifyPendingView": VerifyPendingView_7f41720bd58053ec6dd634fcea5cc9d0,
   "/components/SubscriptionsWidget#SubscriptionsWidget": SubscriptionsWidget_2abd24e0b948c3658f0e029740d2c554,
   "/components/DataUsageWidget#DataUsageWidget": DataUsageWidget_ed39dcc1fcd865b21f77495b978bbf91,
+  "/components/FetchErrorsWidget#FetchErrorsWidget": FetchErrorsWidget_28581a3020e3c07dc0fad3a52cbbf101,
   "@payloadcms/next/rsc#CollectionCards": CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1
 }

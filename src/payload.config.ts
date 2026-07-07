@@ -84,6 +84,13 @@ export default buildConfig({
           minWidth: 'small',
           maxWidth: 'medium',
         },
+        {
+          slug: 'fetch-errors',
+          label: 'Fetch errors',
+          Component: '/components/FetchErrorsWidget#FetchErrorsWidget',
+          minWidth: 'small',
+          maxWidth: 'medium',
+        },
       ],
     },
     importMap: {
