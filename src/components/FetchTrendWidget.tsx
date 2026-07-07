@@ -1,14 +1,9 @@
 import type { WidgetServerProps } from 'payload'
 
+import { FetchTrendChart } from './FetchTrendChart'
+
 /** Days of history the chart spans (including today). */
 const DAYS = 7
-
-/** SVG viewBox — wide and short, drawn in these user units then scaled to fit. */
-const VIEW_W = 300
-const VIEW_H = 72
-const PAD_X = 6
-const PAD_TOP = 6
-const PAD_BOTTOM = 16 // room for day labels
 
 type Day = { label: string; rate: number | null }
 
@@ -45,7 +40,7 @@ export async function FetchTrendWidget(props: WidgetServerProps) {
 
       {withData.length > 0 ? (
         <>
-          <TrendChart days={days} />
+          <FetchTrendChart days={days} />
           <p className="usage-widget__caption">
             {avg !== null ? `avg ${formatPercent(avg)}% over ${withData.length}d` : ''}
           </p>
@@ -54,67 +49,6 @@ export async function FetchTrendWidget(props: WidgetServerProps) {
         <p className="usage-widget__empty">No fetch attempts recorded yet.</p>
       )}
     </div>
-  )
-}
-
-/** Inline SVG line — one point per day, gaps (days with no attempts) break the
- * line. Minimal by design: a single thin accent stroke, faint baseline, small
- * markers, quiet day labels — no axes, grid, or fill. */
-function TrendChart({ days }: { days: Day[] }) {
-  const innerW = VIEW_W - PAD_X * 2
-  const innerH = VIEW_H - PAD_TOP - PAD_BOTTOM
-  const step = days.length > 1 ? innerW / (days.length - 1) : 0
-
-  const points = days.map((d, i) => ({
-    label: d.label,
-    x: PAD_X + step * i,
-    // rate 100% at top, 0% at bottom
-    y: d.rate === null ? null : PAD_TOP + innerH * (1 - d.rate / 100),
-  }))
-
-  // Split into contiguous runs of non-null points so gaps break the line.
-  const segments: { x: number; y: number }[][] = []
-  let run: { x: number; y: number }[] = []
-  for (const p of points) {
-    if (p.y === null) {
-      if (run.length) segments.push(run)
-      run = []
-    } else {
-      run.push({ x: p.x, y: p.y })
-    }
-  }
-  if (run.length) segments.push(run)
-
-  const baselineY = PAD_TOP + innerH
-
-  return (
-    <svg
-      className="trend-chart"
-      viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-      preserveAspectRatio="none"
-      role="img"
-      aria-label={`Daily fetch success rate over the last ${days.length} days`}
-    >
-      <line className="trend-chart__baseline" x1={PAD_X} y1={baselineY} x2={VIEW_W - PAD_X} y2={baselineY} />
-
-      {segments.map((seg, i) => (
-        <polyline
-          key={i}
-          className="trend-chart__line"
-          points={seg.map((p) => `${p.x},${p.y}`).join(' ')}
-        />
-      ))}
-
-      {points.map((p, i) =>
-        p.y === null ? null : <circle key={i} className="trend-chart__dot" cx={p.x} cy={p.y} r={2} />,
-      )}
-
-      {points.map((p, i) => (
-        <text key={i} className="trend-chart__label" x={p.x} y={VIEW_H - 4} textAnchor="middle">
-          {p.label}
-        </text>
-      ))}
-    </svg>
   )
 }
 
