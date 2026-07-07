@@ -77,6 +77,13 @@ export default buildConfig({
           minWidth: 'small',
           maxWidth: 'medium',
         },
+        {
+          slug: 'decodo-data-usage',
+          label: 'Residential data usage',
+          Component: '/components/DataUsageWidget#DataUsageWidget',
+          minWidth: 'small',
+          maxWidth: 'medium',
+        },
       ],
     },
     importMap: {
