@@ -324,6 +324,19 @@ html[data-theme='dark'] {
   stroke-width: 1;
 }
 
+/* faint dashed 50% reference line + its small left-hand label */
+.trend-chart__midline {
+  stroke: var(--theme-elevation-150);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+.trend-chart__midline-label {
+  fill: var(--theme-elevation-400);
+  font-family: var(--font-mono);
+  font-size: 8px;
+}
+
 .trend-chart__line {
   fill: none;
   stroke: var(--accent);

@@ -56,6 +56,22 @@ export function FetchTrendChart({ days }: { days: TrendDay[] }) {
             y2={geometry.baselineY}
           />
 
+          {/* faint 50% guide so the eye can read the line against a midpoint */}
+          <line
+            className="trend-chart__midline"
+            x1={PAD_X}
+            y1={geometry.midlineY}
+            x2={size.w - PAD_X}
+            y2={geometry.midlineY}
+          />
+          <text
+            className="trend-chart__midline-label"
+            x={PAD_X}
+            y={geometry.midlineY - 2}
+          >
+            50%
+          </text>
+
           {geometry.segments.map((seg, i) => (
             <polyline
               key={i}
@@ -117,5 +133,11 @@ function computeGeometry(days: TrendDay[], { w, h }: { w: number; h: number }) {
   }
   if (run.length) segments.push(run)
 
-  return { points, segments, baselineY: PAD_TOP + innerH }
+  return {
+    points,
+    segments,
+    baselineY: PAD_TOP + innerH,
+    // 50% sits halfway up the plot area (100% top, 0% at the baseline)
+    midlineY: PAD_TOP + innerH * 0.5,
+  }
 }
