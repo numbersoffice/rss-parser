@@ -342,6 +342,43 @@ html[data-theme='dark'] {
   font-size: 9px;
 }
 
+/* compact segmented toggle above the sparkline (src/components/
+   FetchTrendWidgetView.tsx): switches the rate between counting every fetch
+   attempt and collapsing a fetch's retries into one per-session outcome */
+.trend-toggle {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 5px;
+  background: var(--theme-elevation-100);
+}
+
+.trend-toggle__btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--theme-elevation-500);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.trend-toggle__btn:hover,
+.trend-toggle__btn:focus-visible {
+  color: var(--theme-text);
+}
+
+.trend-toggle__btn--active {
+  background: var(--theme-elevation-0);
+  color: var(--theme-text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+
 /* per-source health strip: last few fetch sessions as coloured dots
    (src/components/SourceHealthBar.tsx), shown inline in the document header bar */
 .source-health {
