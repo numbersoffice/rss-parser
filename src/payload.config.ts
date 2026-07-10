@@ -75,7 +75,6 @@ export default buildConfig({
           slug: 'subscriptions-overview',
           label: 'Subscriptions overview',
           Component: '/components/SubscriptionsWidget#SubscriptionsWidget',
-          // minWidth doubles as the size a freshly added widget spawns at
           minWidth: 'small',
           maxWidth: 'medium',
         },
@@ -87,7 +86,6 @@ export default buildConfig({
           maxWidth: 'medium',
         },
         {
-          // slug kept as 'fetch-errors' so existing saved dashboards keep the widget
           slug: 'fetch-errors',
           label: 'Fetch success rate',
           Component: '/components/FetchTrendWidget#FetchTrendWidget',
