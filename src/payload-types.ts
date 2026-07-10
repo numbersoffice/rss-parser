@@ -183,6 +183,9 @@ export interface User {
    * Admins manage users and shared sources; users manage their own subscriptions.
    */
   role?: ('user' | 'admin') | null;
+  pendingEmail?: string | null;
+  emailChangeToken?: string | null;
+  emailChangeTokenExpiry?: string | null;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -597,6 +600,9 @@ export interface MediaSelect<T extends boolean = true> {
  */
 export interface UsersSelect<T extends boolean = true> {
   role?: T;
+  pendingEmail?: T;
+  emailChangeToken?: T;
+  emailChangeTokenExpiry?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;

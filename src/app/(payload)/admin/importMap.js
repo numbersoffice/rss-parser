@@ -1,12 +1,13 @@
 import { FeedUrlField as FeedUrlField_05f118428fcb6335db9917e53c14c423 } from '@/components/FeedUrlField'
 import { SubscriptionLimitCounter as SubscriptionLimitCounter_b52aa968124e258047389ac8e9d42be9 } from '../../../components/SubscriptionLimitCounter'
 import { SourceHealthBar as SourceHealthBar_1d11d5bcf5853331e08842c6e622dc87 } from '@/components/SourceHealthBar'
+import { EmailChangeNotice as EmailChangeNotice_439147c753482c3c6515f1319dfedb03 } from '../../../components/EmailChangeNotice'
+import { PendingEmailField as PendingEmailField_066f409c618883193136dbf7e68ef5c1 } from '../../../components/PendingEmailField'
+import { LogoutField as LogoutField_d72fb15d86074695e0cf9cf8e320afef } from '../../../components/LogoutField'
 import { UnverifiedCleanupNotice as UnverifiedCleanupNotice_6b639b175d8a6e65f6accd8bcdc306e9 } from '../../../components/UnverifiedCleanupNotice'
 import { RequestLogCleanupNotice as RequestLogCleanupNotice_f1f80c50f0806b63fd6e406ccffe9041 } from '../../../components/RequestLogCleanupNotice'
 import { NavIcon as NavIcon_672434ec0cfa2eb49722dadb8e0e00c9 } from '../../../components/Wordmark'
 import { LoginLogo as LoginLogo_672434ec0cfa2eb49722dadb8e0e00c9 } from '../../../components/Wordmark'
-import { LogoutLink as LogoutLink_2414e27aff656105e93a53fc3633fe19 } from '../../../components/LogoutLink'
-import { AccountLink as AccountLink_9c23144c8716f39e7baa776404b5682b } from '../../../components/AccountLink'
 import { RegisterLink as RegisterLink_6f7208d6a7b0820b780cd3ca3caecf5c } from '../../../components/RegisterLink'
 import { VerifyNotice as VerifyNotice_47c2a5c015cfb27b8b02298fdd545b50 } from '../../../components/VerifyNotice'
 import { RoleStyles as RoleStyles_a2777d84381df65b1d68ac65dd12df74 } from '../../../components/RoleStyles'
@@ -24,12 +25,13 @@ export const importMap = {
   "@/components/FeedUrlField#FeedUrlField": FeedUrlField_05f118428fcb6335db9917e53c14c423,
   "/components/SubscriptionLimitCounter#SubscriptionLimitCounter": SubscriptionLimitCounter_b52aa968124e258047389ac8e9d42be9,
   "@/components/SourceHealthBar#SourceHealthBar": SourceHealthBar_1d11d5bcf5853331e08842c6e622dc87,
+  "/components/EmailChangeNotice#EmailChangeNotice": EmailChangeNotice_439147c753482c3c6515f1319dfedb03,
+  "/components/PendingEmailField#PendingEmailField": PendingEmailField_066f409c618883193136dbf7e68ef5c1,
+  "/components/LogoutField#LogoutField": LogoutField_d72fb15d86074695e0cf9cf8e320afef,
   "/components/UnverifiedCleanupNotice#UnverifiedCleanupNotice": UnverifiedCleanupNotice_6b639b175d8a6e65f6accd8bcdc306e9,
   "/components/RequestLogCleanupNotice#RequestLogCleanupNotice": RequestLogCleanupNotice_f1f80c50f0806b63fd6e406ccffe9041,
   "/components/Wordmark#NavIcon": NavIcon_672434ec0cfa2eb49722dadb8e0e00c9,
   "/components/Wordmark#LoginLogo": LoginLogo_672434ec0cfa2eb49722dadb8e0e00c9,
-  "/components/LogoutLink#LogoutLink": LogoutLink_2414e27aff656105e93a53fc3633fe19,
-  "/components/AccountLink#AccountLink": AccountLink_9c23144c8716f39e7baa776404b5682b,
   "/components/RegisterLink#RegisterLink": RegisterLink_6f7208d6a7b0820b780cd3ca3caecf5c,
   "/components/VerifyNotice#VerifyNotice": VerifyNotice_47c2a5c015cfb27b8b02298fdd545b50,
   "/components/RoleStyles#RoleStyles": RoleStyles_a2777d84381df65b1d68ac65dd12df74,

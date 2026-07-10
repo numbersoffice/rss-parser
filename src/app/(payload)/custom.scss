@@ -470,40 +470,6 @@ html[data-theme='dark'] {
   display: none;
 }
 
-/* the account and "Log out" text links sit in Payload's actions slot, whose
-   default gap (--base / 2) is tuned for icon buttons — text links need more
-   air between them */
-.app-header__actions {
-  gap: var(--base);
-}
-
-/* text links in the top-right header actions — account name and "Log out"
-   (src/components/AccountLink.tsx, LogoutLink.tsx) — same hover behavior as
-   the breadcrumb "Home" link */
-.header-link {
-  color: var(--theme-text);
-  font-weight: 700;
-  font-size: 0.9rem;
-  white-space: nowrap;
-  text-decoration: none;
-}
-
-.header-link:hover,
-.header-link:focus-visible {
-  text-decoration: underline;
-}
-
-/* Payload's avatar button — replaced by the AccountLink header action */
-.app-header__account {
-  display: none;
-}
-
-/* Payload's logout icon at the bottom of the nav sidebar — replaced by the
-   LogoutLink header action, which now shows for admins too */
-.nav__log-out {
-  display: none;
-}
-
 /* short explainer above the user dashboard's widgets */
 .user-dashboard__intro {
   max-width: 44rem;
@@ -619,6 +585,17 @@ select {
   color: var(--theme-text);
 }
 
+/* inline "Log out" link on the email-change success banner so users can
+   quickly re-authenticate with their new address (src/components/EmailChangeNotice.tsx) */
+.verify-notice__logout {
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.verify-notice__logout:hover {
+  text-decoration: underline;
+}
+
 .verify-notice--error {
   border-color: var(--theme-error-500);
   color: var(--theme-error-500);
@@ -635,4 +612,44 @@ select {
   .user-dashboard {
     grid-template-columns: 1fr;
   }
+}
+
+/* "Log out" button in the account-view sidebar
+   (src/components/LogoutField.tsx). Non-admins have the nav — and its built-in
+   logout button — hidden, so this is their way out. Uses Payload's own Button
+   (secondary style); full-width in the narrow sidebar column. */
+.logout-field .btn {
+  width: 100%;
+  margin: 0;
+}
+
+/* pendingEmail custom field description. Payload's .field-description is
+   display:flex, which makes the trailing "Cancel" button a separate flex item
+   sitting off on its own — force normal block/inline flow so the button flows
+   inline at the end of the copy like a text link. */
+.pending-email-field__description {
+  display: block;
+}
+
+/* inline "Cancel" link at the end of the pendingEmail field description, to
+   abort the pending email change (src/components/PendingEmailField.tsx).
+   Styled to sit inline in the description copy, like a text link. */
+.pending-email-cancel {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-decoration: none;
+  font-weight: bold;
+  cursor: pointer;
+  display: inline;
+}
+
+.pending-email-cancel:hover {
+  text-decoration: underline;
+}
+
+.pending-email-cancel:disabled {
+  cursor: default;
+  text-decoration: none;
 }

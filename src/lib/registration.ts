@@ -4,7 +4,9 @@ import { addDataAndFileToRequest, ValidationError } from 'payload'
 import { generateCaptcha, verifyCaptcha } from '@/lib/captcha'
 import { isDisposableEmailDomain } from '@/lib/disposableEmail'
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+/** Shared "looks like an email" check (used by registration and the
+ * email-change flow in the Users collection). */
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /** GET /api/captcha → { question, token } */
 export const captchaEndpoint: Endpoint = {

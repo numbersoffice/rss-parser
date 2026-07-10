@@ -20,6 +20,7 @@ import {
   PRUNE_UNVERIFIED_QUEUE,
   pruneUnverifiedUsersTask,
 } from './lib/jobs/pruneUnverifiedUsers'
+import { loggingEmailAdapter } from './lib/email'
 import { captchaEndpoint, registerEndpoint } from './lib/registration'
 import { publicS3Url, s3Enabled } from './lib/s3'
 import { migrations } from './migrations'
@@ -63,7 +64,6 @@ export default buildConfig({
           },
         },
       },
-      actions: ['/components/LogoutLink#LogoutLink', '/components/AccountLink#AccountLink'],
       providers: ['/components/RoleStyles#RoleStyles'],
       // Banner reflecting the verification-link outcome (?verified / ?verifyError).
       beforeLogin: ['/components/VerifyNotice#VerifyNotice'],
@@ -152,23 +152,24 @@ export default buildConfig({
     // at startup (instrumentation.ts inits Payload on boot).
     prodMigrations: migrations,
   }),
-  ...(process.env.SMTP_HOST
-    ? {
-        email: nodemailerAdapter({
-          defaultFromAddress: process.env.EMAIL_FROM || 'noreply@example.com',
-          defaultFromName: 'RSS Parser',
-          transportOptions: {
-            host: process.env.SMTP_HOST, // email-smtp.<region>.amazonaws.com
-            port: 587,
-            secure: false, // STARTTLS on 587
-            auth: {
-              user: process.env.SMTP_USER,
-              pass: process.env.SMTP_PASS,
-            },
+  // Real SMTP in production; a console-logging fallback everywhere else so the
+  // transactional links (verify, reset, email-change) are still testable in dev
+  // instead of being silently dropped (see src/lib/email.ts).
+  email: process.env.SMTP_HOST
+    ? nodemailerAdapter({
+        defaultFromAddress: process.env.EMAIL_FROM || 'noreply@example.com',
+        defaultFromName: 'RSS Parser',
+        transportOptions: {
+          host: process.env.SMTP_HOST, // email-smtp.<region>.amazonaws.com
+          port: 587,
+          secure: false, // STARTTLS on 587
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
           },
-        }),
-      }
-    : {}),
+        },
+      })
+    : loggingEmailAdapter,
   // Feed item images are mirrored into an S3-compatible bucket (Hetzner Object
   // Storage) so feeds serve stable public URLs instead of the platform's
   // signed, origin-restricted CDN URLs. Without the env vars (local dev) the
