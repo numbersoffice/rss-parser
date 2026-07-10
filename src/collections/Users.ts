@@ -56,7 +56,7 @@ export const Users: CollectionConfig = {
   access: {
     read: isAdminOrSelf,
     create: isAdmin,
-    update: isAdminOrSelf,
+    update: isAdmin,
     delete: isAdmin,
   },
   hooks: {
@@ -115,7 +115,8 @@ export const Users: CollectionConfig = {
       admin: {
         position: 'sidebar',
         condition: adminFieldCondition,
-        description: 'Admins manage users and shared sources; users manage their own subscriptions.',
+        description:
+          'Admins manage users and shared sources; users manage their own subscriptions.',
       },
     },
   ],
