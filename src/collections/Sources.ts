@@ -79,7 +79,8 @@ export const Sources: CollectionConfig = {
       defaultValue: true,
       admin: {
         position: 'sidebar',
-        description: 'Kill-switch: disabled sources stop fetching and their feeds return 404',
+        description:
+          'Disabled sources stop fetching and their feeds return a notice to inform the user that updates have been paused.',
       },
     },
     {
