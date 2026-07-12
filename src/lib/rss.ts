@@ -21,8 +21,7 @@ function deactivationNotice(link: string): string {
     description:
       'This account posts too frequently, so it was deactivated to preserve bandwidth. ' +
       "We are offering rss-parser for free, so unfortunately we can't currently support high volume use cases. " +
-      'If you are interested in sponsoring this particular feed to re-enable it for everyone, please reach out using the contact form at https://www.numbersoffice.com. ' +
-      'No new posts will appear here until it is re-enabled.',
+      'If you are interested in sponsoring this particular feed to re-enable it for everyone, please reach out using the contact form at https://www.numbersoffice.com.',
   })
 }
 
