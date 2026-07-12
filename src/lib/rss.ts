@@ -13,7 +13,7 @@ const escapeXml = (value: string): string =>
  * stopped updating (see buildRssXml). Not persisted — synthesized on render. */
 function deactivationNotice(link: string): string {
   return renderItem({
-    title: 'This feed was paused to preserve bandwidth',
+    title: '[SYSTEM] This feed was paused to preserve bandwidth',
     link,
     guid: 'deactivated-notice',
     // Newest so it sits at the top for readers that order by date.
