@@ -1,5 +1,8 @@
 import type { WidgetServerProps } from 'payload'
 
+import Link from 'next/link'
+import { formatAdminURL } from 'payload/shared'
+
 import { getMaxItemsPerFeed } from '@/lib/limits'
 import { relationId } from '@/lib/relations'
 
@@ -33,6 +36,7 @@ export async function FrequentSourcesWidget(props: WidgetServerProps) {
 
   const cap = await getMaxItemsPerFeed(payload)
   const ranked = await rankSources(payload)
+  const adminRoute = payload.config.routes.admin
 
   return (
     <div className="usage-widget">
@@ -44,11 +48,17 @@ export async function FrequentSourcesWidget(props: WidgetServerProps) {
       {ranked.length > 0 ? (
         <ol className="frequent-sources">
           {ranked.map((s) => (
-            <li key={s.id} className="frequent-sources__row">
-              <span className="frequent-sources__name">{s.name}</span>
-              <span className="frequent-sources__count">
-                {s.count >= cap ? `more than ${cap}` : s.count}
-              </span>
+            <li key={s.id}>
+              <Link
+                className="frequent-sources__row"
+                href={formatAdminURL({ adminRoute, path: `/collections/sources/${s.id}` })}
+                prefetch={false}
+              >
+                <span className="frequent-sources__name">{s.name}</span>
+                <span className="frequent-sources__count">
+                  {s.count >= cap ? `more than ${cap}` : s.count}
+                </span>
+              </Link>
             </li>
           ))}
         </ol>

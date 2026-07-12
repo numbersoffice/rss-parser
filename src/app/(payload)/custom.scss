@@ -301,6 +301,12 @@ html[data-theme='dark'] {
   align-items: baseline;
   justify-content: space-between;
   gap: var(--base);
+  text-decoration: none;
+  color: inherit;
+
+  &:hover .frequent-sources__name {
+    text-decoration: underline;
+  }
 }
 
 .frequent-sources__name {
