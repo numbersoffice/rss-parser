@@ -18,10 +18,12 @@ function deactivationNotice(link: string): string {
     guid: 'deactivated-notice',
     // Newest so it sits at the top for readers that order by date.
     pubDate: new Date(),
-    description:
+    // Raw HTML so the sponsorship link renders as an actual anchor (emitted in a
+    // CDATA block by renderItem) rather than entity-escaped like feed content.
+    descriptionHtml:
       'This account posts too frequently, so it was deactivated to preserve bandwidth. ' +
-      "We are offering rss-parser for free, so unfortunately we can't currently support high volume use cases. " +
-      'If you are interested in sponsoring this particular feed to re-enable it for everyone, please reach out using the contact form at https://www.numbersoffice.com.',
+      "We are offering rss-parser for free, so unfortunately we can't support high volume use-cases. " +
+      'If you are interested in sponsoring this feed to re-enable it for everyone, please reach out using the contact form at <a href="https://www.numbersoffice.com">numbersoffice.com</a>.',
   })
 }
 
@@ -33,6 +35,9 @@ function renderItem(item: {
   guid: string
   pubDate: Date
   description?: string | null
+  // Raw HTML rendered inside a CDATA block instead of entity-escaped. Takes
+  // precedence over `description`. Use for trusted, hand-authored markup only.
+  descriptionHtml?: string | null
   imageUrl?: string | null
 }): string {
   const parts = [
@@ -41,7 +46,11 @@ function renderItem(item: {
     `      <guid isPermaLink="false">${escapeXml(item.guid)}</guid>`,
     `      <pubDate>${item.pubDate.toUTCString()}</pubDate>`,
   ]
-  if (item.description) {
+  if (item.descriptionHtml) {
+    // Guard the CDATA terminator so embedded `]]>` can't close the block early.
+    const safe = item.descriptionHtml.replaceAll(']]>', ']]]]><![CDATA[>')
+    parts.push(`      <description><![CDATA[${safe}]]></description>`)
+  } else if (item.description) {
     parts.push(`      <description>${escapeXml(item.description)}</description>`)
   }
   if (item.imageUrl) {
