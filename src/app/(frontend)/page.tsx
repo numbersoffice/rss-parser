@@ -79,16 +79,10 @@ export default async function HomePage() {
         <>
           <p>
             This tool turns <strong>public Instagram</strong> accounts into rss feeds. Add a handle,
-            get a feed URL, paste it into your reader. No app, no algorithm, no Instagram account.
+            get a feed URL, paste it into your reader. No algorithm, no Instagram account.
           </p>
           <ul className="facts">
-            <li>
-              Data for instagram accounts is fetched once and shared by everyone here. The Instagram
-              API sees only one visitor.
-            </li>
-            <li>
-              Open source, SQLite DB, extensible. New platform connectors are one adapter-file away.
-            </li>
+            <li>Open source and extensible. New platform connectors are one adapter-file away.</li>
           </ul>
           <p className="cta-row">
             <a className="cta" href={payloadConfig.routes.admin}>
