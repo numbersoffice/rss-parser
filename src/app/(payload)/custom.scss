@@ -284,6 +284,40 @@ html[data-theme='dark'] {
   color: var(--theme-elevation-700);
 }
 
+/* ranked list of the busiest sources inside the .usage-widget shell
+   (src/components/FrequentSourcesWidget.tsx) — one row per source, name left,
+   24h post count right. */
+.frequent-sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--base) / 2);
+}
+
+.frequent-sources__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--base);
+}
+
+.frequent-sources__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.frequent-sources__count {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-elevation-700);
+  white-space: nowrap;
+}
+
 /* minimal 7-day success-rate sparkline inside the .usage-widget shell
    (src/components/FetchTrendChart.tsx) — no axes/grid/fill, one thin line.
    Grows to fill the widget's spare height (baseline sits at the bottom) so a

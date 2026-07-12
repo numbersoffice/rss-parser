@@ -35,14 +35,19 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   let source = (await payload
     .findByID({ collection: 'sources', id: sourceId, depth: 0 })
     .catch(() => null)) as Source | null
-  if (!source || source.enabled === false) {
+  if (!source) {
     return new Response('Feed not found', { status: 404 })
   }
 
-  const refreshed = await refreshSourceIfNeeded(payload, source)
-  if (refreshed) {
-    // Re-read so the fresh fetch status is reflected.
-    source = (await payload.findByID({ collection: 'sources', id: source.id, depth: 0 })) as Source
+  // A disabled source still serves its feed, but never fetches — buildRssXml
+  // leads it with a notice explaining the pause (see rss.ts). Only refresh an
+  // enabled source.
+  if (source.enabled !== false) {
+    const refreshed = await refreshSourceIfNeeded(payload, source)
+    if (refreshed) {
+      // Re-read so the fresh fetch status is reflected.
+      source = (await payload.findByID({ collection: 'sources', id: source.id, depth: 0 })) as Source
+    }
   }
 
   const items = await payload.find({

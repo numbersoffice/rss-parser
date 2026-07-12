@@ -9,27 +9,66 @@ const escapeXml = (value: string): string =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;')
 
-/** Render a source and its cached items as an RSS 2.0 document. */
-export function buildRssXml(source: Source, items: FeedItem[], feedUrl: string): string {
-  const entries = items
-    .map((item) => {
-      const parts = [
-        `      <title>${escapeXml(item.title)}</title>`,
-        `      <link>${escapeXml(item.url)}</link>`,
-        `      <guid isPermaLink="false">${escapeXml(item.externalId)}</guid>`,
-        `      <pubDate>${new Date(item.publishedAt).toUTCString()}</pubDate>`,
-      ]
-      if (item.content) {
-        parts.push(`      <description>${escapeXml(item.content)}</description>`)
-      }
-      if (item.imageUrl) {
-        parts.push(`      <enclosure url="${escapeXml(item.imageUrl)}" type="image/jpeg" length="0" />`)
-      }
-      return `    <item>\n${parts.join('\n')}\n    </item>`
-    })
-    .join('\n')
+/** The RSS entry telling a subscriber, in their reader, why a paused feed
+ * stopped updating (see buildRssXml). Not persisted — synthesized on render. */
+function deactivationNotice(link: string): string {
+  return renderItem({
+    title: 'This feed was paused to preserve bandwidth',
+    link,
+    guid: 'deactivated-notice',
+    // Newest so it sits at the top for readers that order by date.
+    pubDate: new Date(),
+    description:
+      'This account posts too frequently, so it was deactivated to preserve bandwidth — this is a free tool. ' +
+      'No new posts will appear here until it is re-enabled.',
+  })
+}
 
+/** Render one `<item>` block. Shared by real feed items and the synthetic
+ * deactivation notice so both get identical escaping and markup. */
+function renderItem(item: {
+  title: string
+  link: string
+  guid: string
+  pubDate: Date
+  description?: string | null
+  imageUrl?: string | null
+}): string {
+  const parts = [
+    `      <title>${escapeXml(item.title)}</title>`,
+    `      <link>${escapeXml(item.link)}</link>`,
+    `      <guid isPermaLink="false">${escapeXml(item.guid)}</guid>`,
+    `      <pubDate>${item.pubDate.toUTCString()}</pubDate>`,
+  ]
+  if (item.description) {
+    parts.push(`      <description>${escapeXml(item.description)}</description>`)
+  }
+  if (item.imageUrl) {
+    parts.push(`      <enclosure url="${escapeXml(item.imageUrl)}" type="image/jpeg" length="0" />`)
+  }
+  return `    <item>\n${parts.join('\n')}\n    </item>`
+}
+
+/** Render a source and its cached items as an RSS 2.0 document. A disabled
+ * source still serves a feed, led by a notice explaining the pause. */
+export function buildRssXml(source: Source, items: FeedItem[], feedUrl: string): string {
   const link = landingUrl(source, feedUrl)
+
+  const entries = items
+    .map((item) =>
+      renderItem({
+        title: item.title,
+        link: item.url,
+        guid: item.externalId,
+        pubDate: new Date(item.publishedAt),
+        description: item.content,
+        imageUrl: item.imageUrl,
+      }),
+    )
+  if (source.enabled === false) {
+    entries.unshift(deactivationNotice(link))
+  }
+  const entriesXml = entries.join('\n')
   // Channel image: the account's profile picture (the mirrored bucket URL once
   // stored, otherwise the platform CDN URL). Emitted through several channel
   // elements because no single one is honoured everywhere: the plain RSS 2.0
@@ -48,7 +87,7 @@ export function buildRssXml(source: Source, items: FeedItem[], feedUrl: string):
     <atom:link href="${escapeXml(feedUrl)}" rel="self" type="application/rss+xml" />
     <description>${escapeXml(`${source.type} feed for ${source.handle}`)}</description>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
-${image}${entries}
+${image}${entriesXml}
   </channel>
 </rss>
 `

@@ -18,6 +18,7 @@ import { VerifyPendingView as VerifyPendingView_7f41720bd58053ec6dd634fcea5cc9d0
 import { SubscriptionsWidget as SubscriptionsWidget_2abd24e0b948c3658f0e029740d2c554 } from '../../../components/SubscriptionsWidget'
 import { DataUsageWidget as DataUsageWidget_ed39dcc1fcd865b21f77495b978bbf91 } from '../../../components/DataUsageWidget'
 import { FetchTrendWidget as FetchTrendWidget_b611e840a21dafc23545ad5cfe478368 } from '../../../components/FetchTrendWidget'
+import { FrequentSourcesWidget as FrequentSourcesWidget_566b7ab5b10c0d608241cf2dcffd51d0 } from '../../../components/FrequentSourcesWidget'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
 /** @type import('payload').ImportMap */
@@ -42,5 +43,6 @@ export const importMap = {
   "/components/SubscriptionsWidget#SubscriptionsWidget": SubscriptionsWidget_2abd24e0b948c3658f0e029740d2c554,
   "/components/DataUsageWidget#DataUsageWidget": DataUsageWidget_ed39dcc1fcd865b21f77495b978bbf91,
   "/components/FetchTrendWidget#FetchTrendWidget": FetchTrendWidget_b611e840a21dafc23545ad5cfe478368,
+  "/components/FrequentSourcesWidget#FrequentSourcesWidget": FrequentSourcesWidget_566b7ab5b10c0d608241cf2dcffd51d0,
   "@payloadcms/next/rsc#CollectionCards": CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1
 }

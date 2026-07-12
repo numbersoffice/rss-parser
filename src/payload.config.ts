@@ -92,6 +92,13 @@ export default buildConfig({
           minWidth: 'small',
           maxWidth: 'medium',
         },
+        {
+          slug: 'frequent-sources',
+          label: 'Most active sources',
+          Component: '/components/FrequentSourcesWidget#FrequentSourcesWidget',
+          minWidth: 'small',
+          maxWidth: 'medium',
+        },
       ],
     },
     importMap: {
