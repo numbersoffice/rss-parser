@@ -8,6 +8,7 @@ import * as migration_20260707_170141_add_request_logs from './20260707_170141_a
 import * as migration_20260707_175302_add_max_fetch_attempts from './20260707_175302_add_max_fetch_attempts';
 import * as migration_20260707_190000_add_request_log_fetch_id from './20260707_190000_add_request_log_fetch_id';
 import * as migration_20260710_120000_add_email_change from './20260710_120000_add_email_change';
+import * as migration_20260712_120000_add_max_items_per_feed from './20260712_120000_add_max_items_per_feed';
 
 export const migrations = [
   {
@@ -59,5 +60,10 @@ export const migrations = [
     up: migration_20260710_120000_add_email_change.up,
     down: migration_20260710_120000_add_email_change.down,
     name: '20260710_120000_add_email_change',
+  },
+  {
+    up: migration_20260712_120000_add_max_items_per_feed.up,
+    down: migration_20260712_120000_add_max_items_per_feed.down,
+    name: '20260712_120000_add_max_items_per_feed',
   },
 ];

@@ -8,6 +8,15 @@ export async function getSubscriptionLimit(payload: Payload): Promise<number> {
   return settings?.maxSubscriptionsPerUser ?? DEFAULT_MAX_SUBSCRIPTIONS
 }
 
+export const DEFAULT_MAX_ITEMS_PER_FEED = 12
+
+/** The admin-configured cap on how many items are kept per feed; the refresh
+ * prunes the oldest beyond it (settings global). */
+export async function getMaxItemsPerFeed(payload: Payload): Promise<number> {
+  const settings = await payload.findGlobal({ slug: 'settings', depth: 0 })
+  return settings?.maxItemsPerFeed ?? DEFAULT_MAX_ITEMS_PER_FEED
+}
+
 export const DEFAULT_MAX_FETCH_ATTEMPTS = 3
 
 /** The admin-configured number of fetch attempts per source before giving up

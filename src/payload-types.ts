@@ -722,6 +722,10 @@ export interface Setting {
    * How many times to try fetching a source before giving up. Instagram returns 401 from a fraction of residential-proxy IPs, so each retry rotates to a fresh IP — 2–3 attempts recovers most transient blocks. Set to 1 to disable retrying.
    */
   maxFetchAttempts: number;
+  /**
+   * How many posts to keep per feed. Each refresh prunes the oldest items beyond this cap — deleting both the item and its stored image. Lowering it prunes on the next refresh.
+   */
+  maxItemsPerFeed: number;
   updatedAt?: string | null;
   createdAt?: string | null;
 }
@@ -750,6 +754,7 @@ export interface PayloadJobsStat {
 export interface SettingsSelect<T extends boolean = true> {
   maxSubscriptionsPerUser?: T;
   maxFetchAttempts?: T;
+  maxItemsPerFeed?: T;
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;

@@ -3,7 +3,7 @@ import type { Payload } from 'payload'
 import { getAdapter } from '@/adapters/registry'
 import type { AttemptRecord, NormalizedItem } from '@/adapters/types'
 import { escapeHtml } from '@/lib/html'
-import { getMaxFetchAttempts } from '@/lib/limits'
+import { getMaxFetchAttempts, getMaxItemsPerFeed } from '@/lib/limits'
 import { outboundFetch } from '@/lib/proxy'
 import { relationId } from '@/lib/relations'
 import { isPublicS3Url, publicS3Url, s3Enabled } from '@/lib/s3'
@@ -91,6 +91,35 @@ export async function storeItems(
       await payload.create({ collection: 'feed-items', data, depth: 0 })
     }
   }
+
+  await pruneToLimit(payload, source.id)
+}
+
+/**
+ * Enforce the per-feed cap: keep the newest N items by publishedAt and delete
+ * the rest. Deleting a feed item cascades to its mirrored S3 image via
+ * FeedItems.afterDelete (bulk delete fires that hook per doc), so no S3 calls
+ * are needed here.
+ */
+async function pruneToLimit(payload: Payload, sourceId: number): Promise<void> {
+  const limit = await getMaxItemsPerFeed(payload)
+  const keep = await payload.find({
+    collection: 'feed-items',
+    where: { source: { equals: sourceId } },
+    sort: '-publishedAt',
+    limit,
+    depth: 0,
+  })
+  // Fewer than `limit` items means nothing to prune; the guard also avoids a
+  // `not_in: []` query when there are none.
+  if (keep.docs.length < limit) return
+  await payload.delete({
+    collection: 'feed-items',
+    where: {
+      and: [{ source: { equals: sourceId } }, { id: { not_in: keep.docs.map((d) => d.id) } }],
+    },
+    depth: 0,
+  })
 }
 
 interface ResolvedImage {
