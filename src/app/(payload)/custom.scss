@@ -286,7 +286,7 @@ html[data-theme='dark'] {
 
 /* ranked list of the busiest sources inside the .usage-widget shell
    (src/components/FrequentSourcesWidget.tsx) — one row per source, name left,
-   24h post count right. */
+   average new posts per day right. */
 .frequent-sources {
   list-style: none;
   margin: 0;

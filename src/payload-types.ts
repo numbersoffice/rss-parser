@@ -73,6 +73,7 @@ export interface Config {
     media: Media;
     users: User;
     'request-logs': RequestLog;
+    'source-activity': SourceActivity;
     'payload-kv': PayloadKv;
     'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
@@ -87,6 +88,7 @@ export interface Config {
     media: MediaSelect<false> | MediaSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     'request-logs': RequestLogsSelect<false> | RequestLogsSelect<true>;
+    'source-activity': SourceActivitySelect<false> | SourceActivitySelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -110,6 +112,7 @@ export interface Config {
     'subscriptions-overview': SubscriptionsOverviewWidget;
     'decodo-data-usage': DecodoDataUsageWidget;
     'fetch-errors': FetchErrorsWidget;
+    'frequent-sources': FrequentSourcesWidget;
     collections: CollectionsWidget;
   };
   user: User;
@@ -118,6 +121,7 @@ export interface Config {
       mirrorSourceImages: TaskMirrorSourceImages;
       pruneUnverifiedUsers: TaskPruneUnverifiedUsers;
       pruneRequestLogs: TaskPruneRequestLogs;
+      pruneSourceActivity: TaskPruneSourceActivity;
       inline: {
         input: unknown;
         output: unknown;
@@ -228,7 +232,7 @@ export interface Source {
    */
   handle: string;
   /**
-   * Kill-switch: disabled sources stop fetching and their feeds return 404
+   * Disabled sources stop fetching and their feeds return a notice to inform the user that updates have been paused.
    */
   enabled?: boolean | null;
   /**
@@ -340,6 +344,26 @@ export interface RequestLog {
   createdAt: string;
 }
 /**
+ * New feed items per source per day, powering the most-active-sources widget — created and pruned automatically (kept for a week)
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "source-activity".
+ */
+export interface SourceActivity {
+  id: number;
+  source: number | Source;
+  /**
+   * Calendar day (YYYY-MM-DD, server timezone) this count is for
+   */
+  day: string;
+  /**
+   * New feed items created for this source on this day
+   */
+  count: number;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -408,7 +432,7 @@ export interface PayloadJob {
     | {
         executedAt: string;
         completedAt: string;
-        taskSlug: 'inline' | 'mirrorSourceImages' | 'pruneUnverifiedUsers' | 'pruneRequestLogs';
+        taskSlug: 'inline' | 'mirrorSourceImages' | 'pruneUnverifiedUsers' | 'pruneRequestLogs' | 'pruneSourceActivity';
         taskID: string;
         input?:
           | {
@@ -441,7 +465,8 @@ export interface PayloadJob {
         id?: string | null;
       }[]
     | null;
-  taskSlug?: ('inline' | 'mirrorSourceImages' | 'pruneUnverifiedUsers' | 'pruneRequestLogs') | null;
+  taskSlug?:
+    ('inline' | 'mirrorSourceImages' | 'pruneUnverifiedUsers' | 'pruneRequestLogs' | 'pruneSourceActivity') | null;
   queue?: string | null;
   waitUntil?: string | null;
   processing?: boolean | null;
@@ -487,6 +512,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'request-logs';
         value: number | RequestLog;
+      } | null)
+    | ({
+        relationTo: 'source-activity';
+        value: number | SourceActivity;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -633,6 +662,17 @@ export interface RequestLogsSelect<T extends boolean = true> {
   error?: T;
   httpStatus?: T;
   durationMs?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "source-activity_select".
+ */
+export interface SourceActivitySelect<T extends boolean = true> {
+  source?: T;
+  day?: T;
+  count?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -801,6 +841,16 @@ export interface FetchErrorsWidget {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "frequent-sources_widget".
+ */
+export interface FrequentSourcesWidget {
+  data?: {
+    [k: string]: unknown;
+  };
+  width: 'small' | 'medium';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "collections_widget".
  */
 export interface CollectionsWidget {
@@ -832,6 +882,14 @@ export interface TaskPruneUnverifiedUsers {
  * via the `definition` "TaskPruneRequestLogs".
  */
 export interface TaskPruneRequestLogs {
+  input?: unknown;
+  output?: unknown;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskPruneSourceActivity".
+ */
+export interface TaskPruneSourceActivity {
   input?: unknown;
   output?: unknown;
 }

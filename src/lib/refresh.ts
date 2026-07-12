@@ -2,6 +2,7 @@ import type { Payload } from 'payload'
 
 import { getAdapter } from '@/adapters/registry'
 import type { AttemptRecord, NormalizedItem } from '@/adapters/types'
+import { dayKey } from '@/lib/day'
 import { escapeHtml } from '@/lib/html'
 import { getMaxFetchAttempts, getMaxItemsPerFeed } from '@/lib/limits'
 import { outboundFetch } from '@/lib/proxy'
@@ -36,7 +37,12 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
     // adapter); the admin-configured cap bounds how many times.
     const maxAttempts = await getMaxFetchAttempts(payload)
     const { items, profile } = await getAdapter(source.type).fetchItems(source, debug, maxAttempts)
-    await storeItems(payload, source, items)
+    const created = await storeItems(payload, source, items)
+    // Record how many *new* items this refresh added, for the day, so the
+    // most-active-sources widget can rank by real activity. Only on this refresh
+    // path — the subscribe-time backfill (findOrCreateVerifiedSource) calls
+    // storeItems directly and is deliberately excluded.
+    await recordDailyActivity(payload, source.id, created)
     // Mirror the account's profile picture into our bucket (see resolveProfileImage).
     profileFields = await resolveProfileImage(payload, source, profile?.imageUrl, true)
     result = { status: 'success', itemCount: items.length, debug }
@@ -55,14 +61,18 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
  * Split out of {@link refreshSource} so the initial fetch that happens while
  * a source is being created (findOrCreateVerifiedSource) can reuse the items
  * it fetched to validate the account, without a second request.
+ *
+ * Returns how many items were newly created (not updated), which the refresh
+ * path records as the source's daily activity.
  */
 export async function storeItems(
   payload: Payload,
   source: Source,
   items: NormalizedItem[],
   opts: { mirrorImages?: boolean } = {},
-): Promise<void> {
+): Promise<number> {
   const { mirrorImages = true } = opts
+  let created = 0
   for (const item of items) {
     const existing = await payload.find({
       collection: 'feed-items',
@@ -89,10 +99,55 @@ export async function storeItems(
       await payload.update({ collection: 'feed-items', id: existing.docs[0].id, data, depth: 0 })
     } else {
       await payload.create({ collection: 'feed-items', data, depth: 0 })
+      created++
     }
   }
 
   await pruneToLimit(payload, source.id)
+  return created
+}
+
+/**
+ * Upsert a source's daily activity row with the number of new items a refresh
+ * just created: add to the existing row for today, or create one. No row is
+ * written when nothing new was added, so days without new items stay absent
+ * (and the collection stays sparse). Never throws — refreshSource is contracted
+ * not to, and this is a bookkeeping side effect, so a failure only logs.
+ */
+async function recordDailyActivity(
+  payload: Payload,
+  sourceId: number,
+  newCount: number,
+): Promise<void> {
+  if (newCount <= 0) return
+  const day = dayKey()
+  try {
+    const existing = await payload.find({
+      collection: 'source-activity',
+      where: { and: [{ source: { equals: sourceId } }, { day: { equals: day } }] },
+      limit: 1,
+      depth: 0,
+    })
+    if (existing.docs.length > 0) {
+      const row = existing.docs[0]
+      await payload.update({
+        collection: 'source-activity',
+        id: row.id,
+        data: { count: (row.count ?? 0) + newCount },
+        depth: 0,
+      })
+    } else {
+      await payload.create({
+        collection: 'source-activity',
+        data: { source: sourceId, day, count: newCount },
+        depth: 0,
+      })
+    }
+  } catch (err) {
+    payload.logger.warn(
+      `Could not record daily activity for source ${sourceId}: ${describeError(err)}`,
+    )
+  }
 }
 
 /**

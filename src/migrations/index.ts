@@ -9,6 +9,7 @@ import * as migration_20260707_175302_add_max_fetch_attempts from './20260707_17
 import * as migration_20260707_190000_add_request_log_fetch_id from './20260707_190000_add_request_log_fetch_id';
 import * as migration_20260710_120000_add_email_change from './20260710_120000_add_email_change';
 import * as migration_20260712_120000_add_max_items_per_feed from './20260712_120000_add_max_items_per_feed';
+import * as migration_20260712_212939_add_source_activity from './20260712_212939_add_source_activity';
 
 export const migrations = [
   {
@@ -44,7 +45,7 @@ export const migrations = [
   {
     up: migration_20260707_170141_add_request_logs.up,
     down: migration_20260707_170141_add_request_logs.down,
-    name: '20260707_170141_add_request_logs'
+    name: '20260707_170141_add_request_logs',
   },
   {
     up: migration_20260707_175302_add_max_fetch_attempts.up,
@@ -65,5 +66,10 @@ export const migrations = [
     up: migration_20260712_120000_add_max_items_per_feed.up,
     down: migration_20260712_120000_add_max_items_per_feed.down,
     name: '20260712_120000_add_max_items_per_feed',
+  },
+  {
+    up: migration_20260712_212939_add_source_activity.up,
+    down: migration_20260712_212939_add_source_activity.down,
+    name: '20260712_212939_add_source_activity'
   },
 ];

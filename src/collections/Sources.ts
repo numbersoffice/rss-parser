@@ -199,6 +199,12 @@ export const Sources: CollectionConfig = {
           where: { source: { equals: id } },
           req,
         })
+        // Daily activity rows likewise reference the source with a nullable FK.
+        await req.payload.delete({
+          collection: 'source-activity',
+          where: { source: { equals: id } },
+          req,
+        })
       },
     ],
     afterDelete: [

@@ -3,27 +3,31 @@ import type { WidgetServerProps } from 'payload'
 import Link from 'next/link'
 import { formatAdminURL } from 'payload/shared'
 
-import { getMaxItemsPerFeed } from '@/lib/limits'
 import { relationId } from '@/lib/relations'
-
-/** Trailing window the ranking covers. */
-const WINDOW_HOURS = 24
 
 /** How many sources the widget lists. */
 const TOP_N = 3
 
-type Ranked = { id: number; name: string; count: number }
+type Ranked = { id: number; name: string; avgPerDay: number }
+
+/** Show a whole number as-is, otherwise one decimal (e.g. 4, 3.5). */
+function formatAvg(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1)
+}
 
 /**
- * Dashboard widget: the sources that published the most posts in the last 24h,
- * so an admin can spot high-frequency accounts — they drive the most proxy
- * bandwidth (each new post is a fetch + image mirror) — and disable them if
- * needed. Only active sources are ranked; a disabled source drops off.
+ * Dashboard widget: the sources that add the most new posts on an average
+ * active day, so an admin can spot high-frequency accounts — they drive the
+ * most proxy bandwidth (each new post is a fetch + image mirror) — and disable
+ * them if needed. Only active sources are ranked; a disabled source drops off.
  *
- * Counted by post `publishedAt`, not our `createdAt`, so the number reflects the
- * account's real posting cadence rather than a subscribe-time seed batch. Feeds
- * keep at most `maxItemsPerFeed` items (pruned on refresh), so a source at that
- * cap may have posted more than we can see — shown as "more than N".
+ * Reads the `source-activity` collection, which records new items per source
+ * per day on each refresh (see recordDailyActivity in src/lib/refresh.ts). The
+ * per-source figure is its average new items per day: total of its activity
+ * counts divided by how many daily buckets it has (days with no new items have
+ * no bucket, so this is an average over active days). Ranking is by that
+ * average. The collection is pruned to a 7-day window, so it averages over at
+ * most the last week.
  *
  * Admin-only, registered under admin.dashboard.widgets in payload.config.ts
  * (which only the admin DefaultDashboard surfaces) and additionally guarded
@@ -34,7 +38,6 @@ export async function FrequentSourcesWidget(props: WidgetServerProps) {
   const { payload, user } = req
   if (user?.role !== 'admin') return null
 
-  const cap = await getMaxItemsPerFeed(payload)
   const ranked = await rankSources(payload)
   const adminRoute = payload.config.routes.admin
 
@@ -42,7 +45,7 @@ export async function FrequentSourcesWidget(props: WidgetServerProps) {
     <div className="usage-widget">
       <div className="usage-widget__header">
         <span className="usage-widget__title">Most active sources</span>
-        <span className="usage-widget__link">last {WINDOW_HOURS}h</span>
+        <span className="usage-widget__link">avg new posts / day</span>
       </div>
 
       {ranked.length > 0 ? (
@@ -55,50 +58,49 @@ export async function FrequentSourcesWidget(props: WidgetServerProps) {
                 prefetch={false}
               >
                 <span className="frequent-sources__name">{s.name}</span>
-                <span className="frequent-sources__count">
-                  {s.count >= cap ? `more than ${cap}` : s.count}
-                </span>
+                <span className="frequent-sources__count">{formatAvg(s.avgPerDay)}</span>
               </Link>
             </li>
           ))}
         </ol>
       ) : (
-        <p className="usage-widget__empty">No new posts in the last {WINDOW_HOURS}h.</p>
+        <p className="usage-widget__empty">No new posts in the last 7 days.</p>
       )}
     </div>
   )
 }
 
 /**
- * Tally feed-items published in the window by source (one pass in JS, mirroring
- * FetchTrendWidget), then resolve names and drop disabled sources. The windowed
- * item set is small even at thousands of sources — most refreshes add no items —
- * and `publishedAt` is indexed.
+ * Reduce the source-activity buckets to an average-new-items-per-day per source
+ * in one pass (sum of counts ÷ number of buckets), then resolve names and drop
+ * disabled sources. The row set is small (one per source per active day, at most
+ * a week deep) and the collection is already pruned to that window.
  */
 async function rankSources(payload: WidgetServerProps['req']['payload']): Promise<Ranked[]> {
-  const cutoff = new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000).toISOString()
-
   const { docs } = await payload.find({
-    collection: 'feed-items',
-    where: { publishedAt: { greater_than_equal: cutoff } },
+    collection: 'source-activity',
     pagination: false,
     depth: 0,
-    select: { source: true },
+    select: { source: true, count: true },
   })
 
-  const counts = new Map<number, number>()
+  // Per source: running total of new items and how many daily buckets it has.
+  const totals = new Map<number, { sum: number; days: number }>()
   for (const doc of docs) {
     const id = relationId(doc.source)
     if (typeof id !== 'number') continue
-    counts.set(id, (counts.get(id) ?? 0) + 1)
+    const acc = totals.get(id) ?? { sum: 0, days: 0 }
+    acc.sum += doc.count ?? 0
+    acc.days += 1
+    totals.set(id, acc)
   }
-  if (counts.size === 0) return []
+  if (totals.size === 0) return []
 
   // Resolve names and the enabled flag for the tallied sources in one query;
   // the id set is bounded by how many sources posted in the window.
   const { docs: sources } = await payload.find({
     collection: 'sources',
-    where: { id: { in: [...counts.keys()] } },
+    where: { id: { in: [...totals.keys()] } },
     pagination: false,
     depth: 0,
     select: { name: true, enabled: true },
@@ -106,7 +108,10 @@ async function rankSources(payload: WidgetServerProps['req']['payload']): Promis
 
   return sources
     .filter((s) => s.enabled !== false)
-    .map((s) => ({ id: s.id, name: s.name, count: counts.get(s.id) ?? 0 }))
-    .sort((a, b) => b.count - a.count)
+    .map((s) => {
+      const acc = totals.get(s.id)!
+      return { id: s.id, name: s.name, avgPerDay: acc.days > 0 ? acc.sum / acc.days : 0 }
+    })
+    .sort((a, b) => b.avgPerDay - a.avgPerDay)
     .slice(0, TOP_N)
 }

@@ -6,6 +6,7 @@ import { PendingEmailField as PendingEmailField_066f409c618883193136dbf7e68ef5c1
 import { LogoutField as LogoutField_d72fb15d86074695e0cf9cf8e320afef } from '../../../components/LogoutField'
 import { UnverifiedCleanupNotice as UnverifiedCleanupNotice_6b639b175d8a6e65f6accd8bcdc306e9 } from '../../../components/UnverifiedCleanupNotice'
 import { RequestLogCleanupNotice as RequestLogCleanupNotice_f1f80c50f0806b63fd6e406ccffe9041 } from '../../../components/RequestLogCleanupNotice'
+import { SourceActivityCleanupNotice as SourceActivityCleanupNotice_25f9829dad0c40568cb4c61e4a2ecf9d } from '../../../components/SourceActivityCleanupNotice'
 import { NavIcon as NavIcon_672434ec0cfa2eb49722dadb8e0e00c9 } from '../../../components/Wordmark'
 import { LoginLogo as LoginLogo_672434ec0cfa2eb49722dadb8e0e00c9 } from '../../../components/Wordmark'
 import { RegisterLink as RegisterLink_6f7208d6a7b0820b780cd3ca3caecf5c } from '../../../components/RegisterLink'
@@ -31,6 +32,7 @@ export const importMap = {
   "/components/LogoutField#LogoutField": LogoutField_d72fb15d86074695e0cf9cf8e320afef,
   "/components/UnverifiedCleanupNotice#UnverifiedCleanupNotice": UnverifiedCleanupNotice_6b639b175d8a6e65f6accd8bcdc306e9,
   "/components/RequestLogCleanupNotice#RequestLogCleanupNotice": RequestLogCleanupNotice_f1f80c50f0806b63fd6e406ccffe9041,
+  "/components/SourceActivityCleanupNotice#SourceActivityCleanupNotice": SourceActivityCleanupNotice_25f9829dad0c40568cb4c61e4a2ecf9d,
   "/components/Wordmark#NavIcon": NavIcon_672434ec0cfa2eb49722dadb8e0e00c9,
   "/components/Wordmark#LoginLogo": LoginLogo_672434ec0cfa2eb49722dadb8e0e00c9,
   "/components/RegisterLink#RegisterLink": RegisterLink_6f7208d6a7b0820b780cd3ca3caecf5c,
