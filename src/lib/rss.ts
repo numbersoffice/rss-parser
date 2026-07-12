@@ -19,7 +19,9 @@ function deactivationNotice(link: string): string {
     // Newest so it sits at the top for readers that order by date.
     pubDate: new Date(),
     description:
-      'This account posts too frequently, so it was deactivated to preserve bandwidth — this is a free tool. ' +
+      'This account posts too frequently, so it was deactivated to preserve bandwidth. ' +
+      "We are offering rss-parser for free, so unfortunately we can't currently support high volume use cases. " +
+      'If you are interested in sponsoring this particular feed to re-enable it for everyone, please reach out using the contact form at https://www.numbersoffice.com. ' +
       'No new posts will appear here until it is re-enabled.',
   })
 }
@@ -54,17 +56,16 @@ function renderItem(item: {
 export function buildRssXml(source: Source, items: FeedItem[], feedUrl: string): string {
   const link = landingUrl(source, feedUrl)
 
-  const entries = items
-    .map((item) =>
-      renderItem({
-        title: item.title,
-        link: item.url,
-        guid: item.externalId,
-        pubDate: new Date(item.publishedAt),
-        description: item.content,
-        imageUrl: item.imageUrl,
-      }),
-    )
+  const entries = items.map((item) =>
+    renderItem({
+      title: item.title,
+      link: item.url,
+      guid: item.externalId,
+      pubDate: new Date(item.publishedAt),
+      description: item.content,
+      imageUrl: item.imageUrl,
+    }),
+  )
   if (source.enabled === false) {
     entries.unshift(deactivationNotice(link))
   }
@@ -77,7 +78,9 @@ export function buildRssXml(source: Source, items: FeedItem[], feedUrl: string):
   // icon in a namespaced element — iTunes' <itunes:image> (the de-facto standard
   // for channel artwork) or Feedly's <webfeeds:icon>. Emitting all three lets
   // each client pick whichever it understands.
-  const image = source.profileImageUrl ? channelImage(source.profileImageUrl, source.name, link) : ''
+  const image = source.profileImageUrl
+    ? channelImage(source.profileImageUrl, source.name, link)
+    : ''
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:webfeeds="http://webfeeds.org/rss/1.0">
@@ -100,15 +103,13 @@ ${image}${entriesXml}
  */
 function channelImage(imageUrl: string, name: string, link: string): string {
   const url = escapeXml(imageUrl)
-  return (
-    `    <image>
+  return `    <image>
       <url>${url}</url>
       <title>${escapeXml(name)}</title>
       <link>${escapeXml(link)}</link>
     </image>
     <itunes:image href="${url}" />
     <webfeeds:icon>${url}</webfeeds:icon>\n`
-  )
 }
 
 /**
