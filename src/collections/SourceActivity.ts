@@ -3,11 +3,11 @@ import type { CollectionConfig } from 'payload'
 import { hiddenFromNonAdmins, isAdmin } from '@/lib/access'
 
 /**
- * One row per source per calendar day, holding how many *new* feed items that
- * source's refreshes created that day (written by `recordDailyActivity` in
- * src/lib/refresh.ts, only on the refresh path — the subscribe-time backfill is
- * deliberately excluded). Days with no new items get no row, so the table stays
- * sparse.
+ * One row per source per calendar day, holding how many *new* feed items were
+ * created for that source that day (counted by FeedItems' afterChange hook via
+ * `recordDailyActivity` in src/lib/activity.ts — the subscribe-time backfill is
+ * deliberately excluded via `context.skipActivity`). Days with no new items get
+ * no row, so the table stays sparse.
  *
  * This is the activity signal behind the "Most active sources" dashboard widget:
  * new items are what cost proxy bandwidth (each is a fetch + image mirror), so

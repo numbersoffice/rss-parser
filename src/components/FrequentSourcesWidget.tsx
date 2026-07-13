@@ -6,13 +6,13 @@ import { formatAdminURL } from 'payload/shared'
 import { relationId } from '@/lib/relations'
 
 /** How many sources the widget lists. */
-const TOP_N = 3
+const TOP_N = 5
 
 type Ranked = { id: number; name: string; avgPerDay: number }
 
-/** Show a whole number as-is, otherwise one decimal (e.g. 4, 3.5). */
+/** Round to a whole number — the widget is a coarse ranking, decimals are noise. */
 function formatAvg(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1)
+  return String(Math.round(n))
 }
 
 /**
@@ -22,7 +22,8 @@ function formatAvg(n: number): string {
  * them if needed. Only active sources are ranked; a disabled source drops off.
  *
  * Reads the `source-activity` collection, which records new items per source
- * per day on each refresh (see recordDailyActivity in src/lib/refresh.ts). The
+ * per day as they are created (see FeedItems' afterChange hook and
+ * recordDailyActivity in src/lib/activity.ts). The
  * per-source figure is its average new items per day: total of its activity
  * counts divided by how many daily buckets it has (days with no new items have
  * no bucket, so this is an average over active days). Ranking is by that

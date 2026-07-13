@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { hiddenFromNonAdmins, isAdmin } from '@/lib/access'
+import { recordDailyActivity } from '@/lib/activity'
 import { relationId } from '@/lib/relations'
 
 /**
@@ -22,6 +23,21 @@ export const FeedItems: CollectionConfig = {
     description: 'Fetched posts, kept in sync automatically — no need to edit these',
   },
   hooks: {
+    // Every created item counts toward its source's daily activity row
+    // (the most-active-sources widget). Counting here — the single place items
+    // come into existence — rather than in the refresh logic means no create
+    // path can be missed or double-counted. Creates that shouldn't count pass
+    // `context.skipActivity` (the subscribe-time seed, which backfills a whole
+    // feed at once).
+    afterChange: [
+      async ({ doc, operation, req, context }) => {
+        if (operation !== 'create' || context.skipActivity) return
+        const sourceId = relationId(doc.source)
+        if (typeof sourceId === 'number') {
+          await recordDailyActivity(req.payload, sourceId, 1)
+        }
+      },
+    ],
     // Also fires per-doc for the bulk delete in Sources.beforeDelete, so a
     // source's stored images are cleaned up when it is garbage-collected.
     // Never fail the item deletion over S3 trouble (e.g. rotated credentials).

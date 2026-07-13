@@ -84,7 +84,9 @@ export async function findOrCreateVerifiedSource(
   // Seed the items fast — skip the (slow) per-image download+upload so the
   // subscribe request returns promptly. When S3 is on, a background job mirrors
   // the images out of band; the items serve their CDN URLs until then.
-  await storeItems(payload, source, items, { mirrorImages: false })
+  // skipActivity: a whole-feed backfill isn't posting activity, so keep it out
+  // of the most-active-sources stats (see FeedItems.afterChange).
+  await storeItems(payload, source, items, { mirrorImages: false, skipActivity: true })
   // Seed the raw CDN profile URL (mirror: false — no download here); the
   // mirrorSourceImages job swaps it for a bucket URL out of band, like it does
   // for the item images.
