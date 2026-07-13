@@ -1,4 +1,4 @@
-import type { Payload } from 'payload'
+import type { Payload, PayloadRequest } from 'payload'
 
 import { getAdapter } from '@/adapters/registry'
 import type { AttemptRecord, NormalizedItem } from '@/adapters/types'
@@ -50,15 +50,30 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
 }
 
 /**
- * Upsert already-fetched items into feed-items, mirroring each item's image
- * into our own bucket so feeds serve stable public URLs (see resolveImage).
- * Split out of {@link refreshSource} so the initial fetch that happens while
- * a source is being created (findOrCreateVerifiedSource) can reuse the items
- * it fetched to validate the account, without a second request.
+ * Reconcile a source's stored feed-items with a fetch's results, mirroring each
+ * stored item's image into our own bucket so feeds serve stable public URLs
+ * (see resolveImage). Split out of {@link refreshSource} so the initial fetch
+ * that happens while a source is being created (findOrCreateVerifiedSource)
+ * can reuse the items it fetched to validate the account, without a second
+ * request.
  *
- * Each created item is counted as that source's daily activity by FeedItems'
- * afterChange hook; `skipActivity` suppresses that (the subscribe-time backfill
- * seeds a whole feed at once, which isn't activity).
+ * Invariant: after this runs, the DB holds exactly the newest ≤N items (the
+ * per-feed cap) of union(fetched, existing) by publishedAt. The target set is
+ * computed in memory first and only the diff is written, so fetched items that
+ * don't make the cut — e.g. an old pinned post the platform keeps serving —
+ * are never inserted at all: no delete/re-create churn, no phantom activity,
+ * no wasted image mirroring. The only creates are genuinely new items, and
+ * each one counts as the source's daily activity via FeedItems' afterChange
+ * hook; `skipActivity` suppresses that (the subscribe-time backfill seeds a
+ * whole feed at once, which isn't activity).
+ *
+ * All row writes happen in one transaction, so a client fetching the feed
+ * mid-reconciliation sees either the old or the new item set — never an
+ * in-between state such as an item (and its image URL) that is pruned moments
+ * later. Image mirroring does network I/O, so item data is prepared before
+ * the transaction opens and the write lock is only held for the row writes
+ * themselves. Deleting a feed item cascades to its mirrored S3 image via
+ * FeedItems.afterDelete.
  */
 export async function storeItems(
   payload: Payload,
@@ -67,31 +82,73 @@ export async function storeItems(
   opts: { mirrorImages?: boolean; skipActivity?: boolean } = {},
 ): Promise<void> {
   const { mirrorImages = true, skipActivity = false } = opts
+
+  const limit = await getMaxItemsPerFeed(payload)
+  const existing = await payload.find({
+    collection: 'feed-items',
+    where: { source: { equals: source.id } },
+    pagination: false,
+    depth: 0,
+  })
+
+  // Union of fetched and existing, keyed by externalId. An entry can carry the
+  // stored doc, the fetched item, or both.
+  const union = new Map<string, { publishedAt: number; fetched?: NormalizedItem; doc?: FeedItem }>()
+  for (const doc of existing.docs) {
+    union.set(doc.externalId, { publishedAt: new Date(doc.publishedAt).getTime(), doc })
+  }
   for (const item of items) {
-    const existing = await payload.find({
-      collection: 'feed-items',
-      where: {
-        and: [{ source: { equals: source.id } }, { externalId: { equals: item.externalId } }],
-      },
-      limit: 1,
-      depth: 0,
+    union.set(item.externalId, {
+      publishedAt: item.publishedAt.getTime(),
+      fetched: item,
+      doc: union.get(item.externalId)?.doc,
     })
+  }
 
-    const image = await resolveImage(payload, source, item, existing.docs[0], mirrorImages)
-    const data = {
-      source: source.id,
-      externalId: item.externalId,
-      title: item.title,
-      content: image.content,
-      url: item.url,
-      imageUrl: image.imageUrl,
-      image: image.image,
-      publishedAt: item.publishedAt.toISOString(),
+  const target = [...union.values()]
+    .sort((a, b) => b.publishedAt - a.publishedAt)
+    .slice(0, limit)
+  const targetExternalIds = new Set(
+    target.map((entry) => entry.fetched?.externalId ?? entry.doc!.externalId),
+  )
+
+  // Prepare all document data up front: buildItemData mirrors images (network
+  // I/O), which must not run while the transaction below holds the write lock.
+  // Updates refresh stored items the fetch returned again (content edits, and
+  // the signed-CDN→bucket URL rewrite in resolveImage); stored items the fetch
+  // didn't return are left untouched.
+  const updates: { id: number; data: FeedItemData }[] = []
+  for (const entry of target) {
+    if (entry.fetched && entry.doc) {
+      updates.push({
+        id: entry.doc.id,
+        data: await buildItemData(payload, source, entry.fetched, entry.doc, mirrorImages),
+      })
     }
+  }
+  const deletes = existing.docs.filter((doc) => !targetExternalIds.has(doc.externalId))
+  const creates: FeedItemData[] = []
+  for (const entry of target.filter((e) => e.fetched && !e.doc).sort((a, b) => a.publishedAt - b.publishedAt)) {
+    creates.push(await buildItemData(payload, source, entry.fetched!, undefined, mirrorImages))
+  }
+  if (updates.length === 0 && deletes.length === 0 && creates.length === 0) return
 
-    if (existing.docs.length > 0) {
-      await payload.update({ collection: 'feed-items', id: existing.docs[0].id, data, depth: 0 })
-    } else {
+  // Commit the whole diff atomically. Hooks receive `req`, so the afterDelete
+  // media cascade and the afterChange activity count join the transaction and
+  // roll back with it. `beginTransaction` returns null when the adapter has
+  // transactions disabled — then this degrades to sequential writes.
+  const transactionID = (await payload.db.beginTransaction()) ?? undefined
+  const req = (transactionID !== undefined ? { transactionID } : undefined) as
+    | PayloadRequest
+    | undefined
+  try {
+    for (const update of updates) {
+      await payload.update({ collection: 'feed-items', id: update.id, data: update.data, depth: 0, req })
+    }
+    for (const doomed of deletes) {
+      await payload.delete({ collection: 'feed-items', id: doomed.id, depth: 0, req })
+    }
+    for (const data of creates) {
       await payload.create({
         collection: 'feed-items',
         data,
@@ -99,53 +156,38 @@ export async function storeItems(
         // FeedItems.afterChange counts each created item as daily activity
         // unless told not to.
         context: { skipActivity },
+        req,
       })
     }
+    if (transactionID !== undefined) await payload.db.commitTransaction(transactionID)
+  } catch (err) {
+    if (transactionID !== undefined) await payload.db.rollbackTransaction(transactionID)
+    throw err
   }
-
-  await pruneToLimit(payload, source.id, items.map((item) => item.externalId))
 }
 
-/**
- * Enforce the per-feed cap: keep the newest N items by publishedAt and delete
- * the rest — except items the current fetch still returns. Deleting one of
- * those (e.g. an old pinned post the platform keeps serving, or when the cap
- * is set below the platform's batch size) would just make the next refresh
- * re-create it, churning deletes/creates and inflating the source's activity
- * counts; keeping them bounds storage at cap + batch size in the worst case.
- * Deleting a feed item cascades to its mirrored S3 image via
- * FeedItems.afterDelete (bulk delete fires that hook per doc), so no S3 calls
- * are needed here.
- */
-async function pruneToLimit(
+type FeedItemData = Awaited<ReturnType<typeof buildItemData>>
+
+/** The feed-item document fields for a fetched item, with its image resolved
+ * (see resolveImage). Shared by the update and create branches of storeItems. */
+async function buildItemData(
   payload: Payload,
-  sourceId: number,
-  fetchedExternalIds: string[],
-): Promise<void> {
-  const limit = await getMaxItemsPerFeed(payload)
-  const keep = await payload.find({
-    collection: 'feed-items',
-    where: { source: { equals: sourceId } },
-    sort: '-publishedAt',
-    limit,
-    depth: 0,
-  })
-  // Fewer than `limit` items means nothing to prune; the guard also avoids a
-  // `not_in: []` query when there are none.
-  if (keep.docs.length < limit) return
-  await payload.delete({
-    collection: 'feed-items',
-    where: {
-      and: [
-        { source: { equals: sourceId } },
-        { id: { not_in: keep.docs.map((d) => d.id) } },
-        ...(fetchedExternalIds.length > 0
-          ? [{ externalId: { not_in: fetchedExternalIds } }]
-          : []),
-      ],
-    },
-    depth: 0,
-  })
+  source: Source,
+  item: NormalizedItem,
+  existing: FeedItem | undefined,
+  mirrorImages: boolean,
+) {
+  const image = await resolveImage(payload, source, item, existing, mirrorImages)
+  return {
+    source: source.id,
+    externalId: item.externalId,
+    title: item.title,
+    content: image.content,
+    url: item.url,
+    imageUrl: image.imageUrl,
+    image: image.image,
+    publishedAt: item.publishedAt.toISOString(),
+  }
 }
 
 interface ResolvedImage {

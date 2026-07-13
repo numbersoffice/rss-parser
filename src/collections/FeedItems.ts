@@ -34,7 +34,7 @@ export const FeedItems: CollectionConfig = {
         if (operation !== 'create' || context.skipActivity) return
         const sourceId = relationId(doc.source)
         if (typeof sourceId === 'number') {
-          await recordDailyActivity(req.payload, sourceId, 1)
+          await recordDailyActivity(req.payload, sourceId, 1, req)
         }
       },
     ],

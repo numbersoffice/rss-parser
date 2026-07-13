@@ -162,6 +162,10 @@ export default buildConfig({
     client: {
       url: process.env.DATABASE_URL || 'file:./rss-parser.db',
     },
+    // Transactions are off by default for SQLite; the feed reconciliation
+    // (storeItems in src/lib/refresh.ts) relies on them to commit its diff
+    // atomically, so feed readers never see a half-updated item set.
+    transactionOptions: {},
     // Schema is only auto-pushed in dev; in production the migrations run
     // at startup (instrumentation.ts inits Payload on boot).
     prodMigrations: migrations,

@@ -57,7 +57,11 @@ export async function findOrCreateVerifiedSource(
     // The adapter only reads handle/type off the source; it isn't persisted.
     // Retry on a fresh proxy IP so a first-time verify isn't blocked by a bad IP.
     const maxAttempts = await getMaxFetchAttempts(payload)
-    feed = await getAdapter(type).fetchItems({ type, handle: normalized } as Source, debug, maxAttempts)
+    feed = await getAdapter(type).fetchItems(
+      { type, handle: normalized } as Source,
+      debug,
+      maxAttempts,
+    )
   } catch (err) {
     throw new APIError(describeError(err), 400)
   }
