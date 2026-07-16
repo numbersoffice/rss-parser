@@ -169,6 +169,8 @@ export default buildConfig({
     // Schema is only auto-pushed in dev; in production the migrations run
     // at startup (instrumentation.ts inits Payload on boot).
     prodMigrations: migrations,
+    wal: true,
+    busyTimeout: 5000,
   }),
   // Real SMTP in production; a console-logging fallback everywhere else so the
   // transactional links (verify, reset, email-change) are still testable in dev
