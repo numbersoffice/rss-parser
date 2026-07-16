@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url'
 
 import { FeedItems } from './collections/FeedItems'
 import { Media } from './collections/Media'
+import { News } from './collections/News'
 import { RequestLogs } from './collections/RequestLogs'
 import { SourceActivity } from './collections/SourceActivity'
 import { Sources } from './collections/Sources'
@@ -128,7 +129,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Subscriptions, Sources, FeedItems, Media, Users, RequestLogs, SourceActivity],
+  collections: [Subscriptions, Sources, FeedItems, Media, News, Users, RequestLogs, SourceActivity],
   endpoints: [captchaEndpoint, registerEndpoint],
   globals: [Settings],
   // Background jobs. Mirroring a new source's images to S3 is deferred off the

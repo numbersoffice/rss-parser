@@ -84,6 +84,8 @@ a:focus-visible {
   color: var(--muted);
   font-size: 13px;
   text-align: right;
+  display: inline-flex;
+  gap: 1rem;
 }
 
 /* hero: the page speaks RSS ----------------------------------------- */
@@ -264,6 +266,77 @@ p {
 .feed-list a {
   font-size: 13px;
   word-break: break-all;
+}
+
+/* news ---------------------------------------------------------------- */
+
+.news-teaser {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.news-teaser-label {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.news-list {
+  margin: 1.25rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.news-list li {
+  padding: 0.75rem 0;
+  border-bottom: var(--hairline);
+}
+
+.news-list li:first-child {
+  border-top: var(--hairline);
+}
+
+.news-date {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 0 0.75rem;
+}
+
+.news-list .news-snippet {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.news-title {
+  margin: 2.5rem 0 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+article .news-date {
+  margin: 0.25rem 0 0;
+}
+
+/* lexical body: keep headings inside the monospace scale */
+.news-body h1,
+.news-body h2,
+.news-body h3,
+.news-body h4 {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 2rem 0 1rem;
+}
+
+.news-body blockquote {
+  margin: 1.25rem 0;
+  padding-left: 1rem;
+  border-left: 2px solid var(--accent);
+  color: var(--muted);
+}
+
+.news-body ul,
+.news-body ol {
+  padding-left: 1.4rem;
 }
 
 /* colophon ----------------------------------------------------------- */

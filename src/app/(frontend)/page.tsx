@@ -5,6 +5,7 @@ import React from 'react'
 
 import config from '@/payload.config'
 import { Wordmark } from '@/components/Wordmark'
+import { newsTeaser } from '@/lib/news'
 import './styles.css'
 
 export const dynamic = 'force-dynamic'
@@ -62,6 +63,10 @@ export default async function HomePage() {
       })
     : null
 
+  const latestNews = (
+    await payload.find({ collection: 'news', sort: '-publishedAt', limit: 1, depth: 0 })
+  ).docs[0]
+
   return (
     <div className="page">
       <header className="masthead">
@@ -69,6 +74,7 @@ export default async function HomePage() {
           <Wordmark />
         </Link>
         <span className="masthead-meta">
+          <Link href="/news">news</Link>
           <a href="https://github.com/numbersoffice/rss-parser/tree/main">github</a>
         </span>
       </header>
@@ -92,6 +98,14 @@ export default async function HomePage() {
               create an account →
             </a>
           </p>
+          {latestNews && (
+            <p className="news-teaser">
+              <span className="news-teaser-label">news:</span>{' '}
+              <Link href={`/news/${latestNews.slug}`}>{latestNews.title}</Link>
+              {' — '}
+              {newsTeaser(latestNews)}
+            </p>
+          )}
         </>
       )}
 

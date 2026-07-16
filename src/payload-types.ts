@@ -71,6 +71,7 @@ export interface Config {
     sources: Source;
     'feed-items': FeedItem;
     media: Media;
+    news: News;
     users: User;
     'request-logs': RequestLog;
     'source-activity': SourceActivity;
@@ -86,6 +87,7 @@ export interface Config {
     sources: SourcesSelect<false> | SourcesSelect<true>;
     'feed-items': FeedItemsSelect<false> | FeedItemsSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    news: NewsSelect<false> | NewsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     'request-logs': RequestLogsSelect<false> | RequestLogsSelect<true>;
     'source-activity': SourceActivitySelect<false> | SourceActivitySelect<true>;
@@ -318,6 +320,42 @@ export interface FeedItem {
   createdAt: string;
 }
 /**
+ * Posts shown on /news — public, written by admins.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "news".
+ */
+export interface News {
+  id: number;
+  title: string;
+  /**
+   * URL path segment — generated from the title when left empty.
+   */
+  slug?: string | null;
+  publishedAt: string;
+  /**
+   * Teaser for the homepage and meta description. Falls back to the first words of the post.
+   */
+  excerpt?: string | null;
+  content: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * One row per adapter fetch attempt, used for health trends — created and pruned automatically (kept for a week)
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -506,6 +544,10 @@ export interface PayloadLockedDocument {
         value: number | Media;
       } | null)
     | ({
+        relationTo: 'news';
+        value: number | News;
+      } | null)
+    | ({
         relationTo: 'users';
         value: number | User;
       } | null)
@@ -622,6 +664,19 @@ export interface MediaSelect<T extends boolean = true> {
   filesize?: T;
   width?: T;
   height?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "news_select".
+ */
+export interface NewsSelect<T extends boolean = true> {
+  title?: T;
+  slug?: T;
+  publishedAt?: T;
+  excerpt?: T;
+  content?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
