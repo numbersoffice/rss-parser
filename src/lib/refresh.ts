@@ -12,8 +12,16 @@ import type { FeedItem, Source } from '@/payload-types'
 export interface RefreshResult {
   status: 'success' | 'error'
   itemCount?: number
+  changes?: ItemChanges
   error?: string
   debug?: Record<string, unknown>
+}
+
+/** What a reconciliation ({@link storeItems}) did to the stored feed-items. */
+export interface ItemChanges {
+  created: number
+  updated: number
+  deleted: number
 }
 
 /**
@@ -36,10 +44,10 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
     // adapter); the admin-configured cap bounds how many times.
     const maxAttempts = await getMaxFetchAttempts(payload)
     const { items, profile } = await getAdapter(source.type).fetchItems(source, debug, maxAttempts)
-    await storeItems(payload, source, items)
+    const changes = await storeItems(payload, source, items)
     // Mirror the account's profile picture into our bucket (see resolveProfileImage).
     profileFields = await resolveProfileImage(payload, source, profile?.imageUrl, true)
-    result = { status: 'success', itemCount: items.length, debug }
+    result = { status: 'success', itemCount: items.length, changes, debug }
   } catch (err) {
     result = { status: 'error', error: describeError(err), debug }
     payload.logger.warn(`Refresh failed for source "${source.name}": ${result.error}`)
@@ -74,13 +82,16 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
  * the transaction opens and the write lock is only held for the row writes
  * themselves. Deleting a feed item cascades to its mirrored S3 image via
  * FeedItems.afterDelete.
+ *
+ * Returns what the reconciliation did, so callers can report it (e.g. the
+ * admin's manual-refresh toast shows how many items were new and pruned).
  */
 export async function storeItems(
   payload: Payload,
   source: Source,
   items: NormalizedItem[],
   opts: { mirrorImages?: boolean; skipActivity?: boolean } = {},
-): Promise<void> {
+): Promise<ItemChanges> {
   const { mirrorImages = true, skipActivity = false } = opts
 
   const limit = await getMaxItemsPerFeed(payload)
@@ -131,7 +142,12 @@ export async function storeItems(
   for (const entry of target.filter((e) => e.fetched && !e.doc).sort((a, b) => a.publishedAt - b.publishedAt)) {
     creates.push(await buildItemData(payload, source, entry.fetched!, undefined, mirrorImages))
   }
-  if (updates.length === 0 && deletes.length === 0 && creates.length === 0) return
+  const changes: ItemChanges = {
+    created: creates.length,
+    updated: updates.length,
+    deleted: deletes.length,
+  }
+  if (updates.length === 0 && deletes.length === 0 && creates.length === 0) return changes
 
   // Commit the whole diff atomically. Hooks receive `req`, so the afterDelete
   // media cascade and the afterChange activity count join the transaction and
@@ -164,6 +180,7 @@ export async function storeItems(
     if (transactionID !== undefined) await payload.db.rollbackTransaction(transactionID)
     throw err
   }
+  return changes
 }
 
 type FeedItemData = Awaited<ReturnType<typeof buildItemData>>

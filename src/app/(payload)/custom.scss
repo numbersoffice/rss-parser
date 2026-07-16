@@ -475,6 +475,29 @@ html[data-theme='dark'] {
   color: var(--theme-elevation-500);
 }
 
+/* minimal "Refresh now" text link beside the health dots in the source
+   document header (src/components/SourceRefreshLink.tsx) */
+.source-refresh {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-right: calc(var(--base) / 2);
+  font-size: 0.8rem;
+  color: var(--theme-elevation-500);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.source-refresh:hover {
+  color: var(--theme-elevation-800);
+}
+
+.source-refresh:disabled {
+  cursor: default;
+  text-decoration: none;
+}
+
 /* quiet "7 / 12 subscriptions used" above the subscriptions list
    (src/components/SubscriptionLimitCounter.tsx) */
 .subs-limit {

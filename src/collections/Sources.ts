@@ -24,8 +24,12 @@ export const Sources: CollectionConfig = {
       edit: {
         // Recent-fetch health dots live in the document header bar, next to the
         // save controls — an at-a-glance readout that's visible without opening
-        // the collapsed "Last fetch" group.
-        beforeDocumentControls: ['@/components/SourceHealthBar#SourceHealthBar'],
+        // the collapsed "Last fetch" group. Beside them, a minimal text link to
+        // force a fetch regardless of the source's refresh interval.
+        beforeDocumentControls: [
+          '@/components/SourceHealthBar#SourceHealthBar',
+          '@/components/SourceRefreshLink#SourceRefreshLink',
+        ],
       },
     },
   },
