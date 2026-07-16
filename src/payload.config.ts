@@ -82,6 +82,13 @@ export default buildConfig({
           maxWidth: 'medium',
         },
         {
+          slug: 'latest-news',
+          label: 'Latest news',
+          Component: '/components/NewsWidget#NewsWidget',
+          minWidth: 'small',
+          maxWidth: 'medium',
+        },
+        {
           slug: 'decodo-data-usage',
           label: 'Residential data usage',
           Component: '/components/DataUsageWidget#DataUsageWidget',

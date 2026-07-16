@@ -41,6 +41,7 @@ import { RoleDashboard as RoleDashboard_40d89c537743756be1ff63fda6d94af8 } from 
 import { RegisterView as RegisterView_e6e9c13a362da938250f046cf5d57093 } from '../../../components/RegisterView'
 import { VerifyPendingView as VerifyPendingView_7f41720bd58053ec6dd634fcea5cc9d0 } from '../../../components/VerifyPendingView'
 import { SubscriptionsWidget as SubscriptionsWidget_2abd24e0b948c3658f0e029740d2c554 } from '../../../components/SubscriptionsWidget'
+import { NewsWidget as NewsWidget_a5e0f060f319d4bef1276e81614aadbb } from '../../../components/NewsWidget'
 import { DataUsageWidget as DataUsageWidget_ed39dcc1fcd865b21f77495b978bbf91 } from '../../../components/DataUsageWidget'
 import { FetchTrendWidget as FetchTrendWidget_b611e840a21dafc23545ad5cfe478368 } from '../../../components/FetchTrendWidget'
 import { FrequentSourcesWidget as FrequentSourcesWidget_566b7ab5b10c0d608241cf2dcffd51d0 } from '../../../components/FrequentSourcesWidget'
@@ -91,6 +92,7 @@ export const importMap = {
   "/components/RegisterView#RegisterView": RegisterView_e6e9c13a362da938250f046cf5d57093,
   "/components/VerifyPendingView#VerifyPendingView": VerifyPendingView_7f41720bd58053ec6dd634fcea5cc9d0,
   "/components/SubscriptionsWidget#SubscriptionsWidget": SubscriptionsWidget_2abd24e0b948c3658f0e029740d2c554,
+  "/components/NewsWidget#NewsWidget": NewsWidget_a5e0f060f319d4bef1276e81614aadbb,
   "/components/DataUsageWidget#DataUsageWidget": DataUsageWidget_ed39dcc1fcd865b21f77495b978bbf91,
   "/components/FetchTrendWidget#FetchTrendWidget": FetchTrendWidget_b611e840a21dafc23545ad5cfe478368,
   "/components/FrequentSourcesWidget#FrequentSourcesWidget": FrequentSourcesWidget_566b7ab5b10c0d608241cf2dcffd51d0,

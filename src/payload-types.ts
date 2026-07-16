@@ -112,6 +112,7 @@ export interface Config {
   locale: null;
   widgets: {
     'subscriptions-overview': SubscriptionsOverviewWidget;
+    'latest-news': LatestNewsWidget;
     'decodo-data-usage': DecodoDataUsageWidget;
     'fetch-errors': FetchErrorsWidget;
     'frequent-sources': FrequentSourcesWidget;
@@ -869,6 +870,16 @@ export interface PayloadJobsStatsSelect<T extends boolean = true> {
  * via the `definition` "subscriptions-overview_widget".
  */
 export interface SubscriptionsOverviewWidget {
+  data?: {
+    [k: string]: unknown;
+  };
+  width: 'small' | 'medium';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "latest-news_widget".
+ */
+export interface LatestNewsWidget {
   data?: {
     [k: string]: unknown;
   };

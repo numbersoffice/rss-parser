@@ -4,6 +4,7 @@ import { DefaultDashboard } from '@payloadcms/next/views'
 import { Gutter } from '@payloadcms/ui'
 import React from 'react'
 
+import { NewsWidget } from './NewsWidget'
 import { SubscriptionsWidget } from './SubscriptionsWidget'
 
 /**
@@ -39,6 +40,19 @@ export function RoleDashboard(props: DashboardViewServerProps) {
                 permissions={permissions}
                 req={req}
                 widgetSlug="subscriptions-overview"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="widget">
+          <div className="widget-wrapper">
+            <div className="widget-content">
+              <NewsWidget
+                cookies={cookies}
+                locale={locale}
+                permissions={permissions}
+                req={req}
+                widgetSlug="latest-news"
               />
             </div>
           </div>

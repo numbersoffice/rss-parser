@@ -180,6 +180,90 @@ html[data-theme='dark'] {
   transform: none;
 }
 
+/* Latest news widget (src/components/NewsWidget.tsx): the newest /news post
+   as title + date + teaser. Same card frame as .subs-widget, with the
+   header-title / quiet-link layout of .usage-widget. */
+.news-widget {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--base) / 2);
+  height: 100%;
+  padding: var(--base);
+  background: var(--theme-elevation-50);
+  border: 1px solid var(--theme-elevation-150);
+}
+
+.news-widget__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--base);
+}
+
+.news-widget__title {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+/* inconspicuous text link over to the full /news page — no button chrome */
+.news-widget__link {
+  color: var(--theme-elevation-500);
+  font-size: 0.8rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.news-widget__link:hover,
+.news-widget__link:focus-visible {
+  color: var(--theme-text);
+  text-decoration: underline;
+}
+
+.news-widget__post {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--base) / 4);
+}
+
+/* the post itself is the click target; underline on hover like the
+   breadcrumb "Home" link */
+.news-widget__post-title {
+  color: var(--theme-text);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.news-widget__post-title:hover,
+.news-widget__post-title:focus-visible {
+  text-decoration: underline;
+}
+
+.news-widget__date {
+  font-size: 0.8rem;
+  color: var(--theme-elevation-500);
+}
+
+/* teaser capped at three lines so a long excerpt can't stretch the card */
+.news-widget__teaser {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--theme-elevation-650);
+}
+
+/* "no posts yet" fallback text */
+.news-widget__empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--theme-elevation-500);
+}
+
 /* Residential data usage widget (src/components/DataUsageWidget.tsx): Decodo
    proxy GB for the billing cycle. A system-admin readout — same card frame as
    .subs-widget (padding / bg / border) but a compact, detail-dense layout
