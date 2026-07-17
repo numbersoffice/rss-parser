@@ -8,10 +8,8 @@ import { describeError } from '@/lib/refresh'
  * created: add to the existing row for today, or create one. Called from
  * FeedItems' afterChange hook for every created item (unless the create passed
  * `context.skipActivity`, e.g. the subscribe-time seed), so days without new
- * items stay absent (and the collection stays sparse). Pass `req` from inside
- * a hook so the writes join the surrounding transaction (and roll back with
- * it). Never throws — item creation must not fail over bookkeeping, so a
- * failure only logs.
+ * items stay absent (and the collection stays sparse). Never throws — item
+ * creation must not fail over bookkeeping, so a failure only logs.
  */
 export async function recordDailyActivity(
   payload: Payload,

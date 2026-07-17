@@ -139,8 +139,8 @@ export const Subscriptions: CollectionConfig = {
             data.handle = originalDoc.handle
           }
           if (operation === 'create') {
-            // access.create already gates this; re-check inside the
-            // transaction so concurrent creates can't slip past the cap.
+            // access.create already gates this; re-check at write time as a
+            // best-effort guard against concurrent creates racing the cap.
             const [limit, count] = await Promise.all([
               getSubscriptionLimit(req.payload),
               countUserSubscriptions(req.payload, req.user.id, req),

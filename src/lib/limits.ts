@@ -26,8 +26,7 @@ export async function getMaxFetchAttempts(payload: Payload): Promise<number> {
   return settings?.maxFetchAttempts ?? DEFAULT_MAX_FETCH_ATTEMPTS
 }
 
-/** How many subscriptions a user currently has. Pass `req` from inside a
- * hook so the count sees the surrounding transaction. */
+/** How many subscriptions a user currently has. */
 export async function countUserSubscriptions(
   payload: Payload,
   userId: string | number,

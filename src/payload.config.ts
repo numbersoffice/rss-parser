@@ -169,11 +169,38 @@ export default buildConfig({
   db: sqliteAdapter({
     client: {
       url: process.env.DATABASE_URL || 'file:./rss-parser.db',
+      // Busy timeout for EVERY connection the libsql client opens — the
+      // adapter-level `busyTimeout` below is a PRAGMA run once on the initial
+      // connection only, and @libsql/client discards that connection whenever
+      // a transaction starts (e.g. boot-time migrations) and lazily opens a
+      // fresh one that would otherwise have busy_timeout=0. Requires
+      // @libsql/client >= 0.17 (pnpm override in package.json; Payload pins
+      // 0.14). This absorbs contention from other PROCESSES — the old
+      // container during a rolling deploy, boot-time migrations, a stray CLI.
+      // In-process contention is prevented structurally instead: transactions
+      // are off (see below) so all writes share one connection.
+      timeout: 5000,
     },
-    // Transactions are off by default for SQLite; the feed reconciliation
-    // (storeItems in src/lib/refresh.ts) relies on them to commit its diff
-    // atomically, so feed readers never see a half-updated item set.
-    transactionOptions: {},
+    // Transactions are off (the adapter's default — do NOT set
+    // transactionOptions). Enabling them makes Payload wrap EVERY
+    // create/update/delete in its own BEGIN IMMEDIATE transaction on its own
+    // connection, opened at operation start — so the write lock is held
+    // across everything the operation's hooks do (the Instagram verify fetch
+    // during subscribe, S3 uploads during media creates), and hooks that
+    // write without joining the outer transaction via `req` open a SECOND
+    // transaction that contends with the still-open first one. In-process
+    // that contention is fatal, not slow: libsql runs statements
+    // synchronously, so the waiter blocks the event loop, the holder can
+    // never commit, and the waiter fails with SQLITE_BUSY after burning the
+    // whole busy timeout. It made every subscribe and every admin
+    // "add source" fail deterministically.
+    //
+    // Without transactions, all writes are autocommit statements on ONE
+    // shared connection — in-process contention is impossible. The feed
+    // reconciliation (storeItems in src/lib/refresh.ts) writes its diff
+    // sequentially; the unique (source, externalId) index on feed-items is
+    // what guards against concurrent refreshes of the same source.
+    //
     // Schema is only auto-pushed in dev; in production the migrations run
     // at startup (instrumentation.ts inits Payload on boot).
     prodMigrations: migrations,
