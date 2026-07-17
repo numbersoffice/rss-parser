@@ -1,8 +1,7 @@
-import type { Payload, PayloadRequest } from 'payload'
+import type { Payload } from 'payload'
 
 import { getAdapter } from '@/adapters/registry'
 import type { AttemptRecord, NormalizedItem } from '@/adapters/types'
-import { withDbWriteLock } from '@/lib/dbWriteLock'
 import { escapeHtml } from '@/lib/html'
 import { getMaxFetchAttempts, getMaxItemsPerFeed } from '@/lib/limits'
 import { outboundFetch } from '@/lib/proxy'
@@ -76,12 +75,14 @@ export async function refreshSource(payload: Payload, sourceId: string | number)
  * hook; `skipActivity` suppresses that (the subscribe-time backfill seeds a
  * whole feed at once, which isn't activity).
  *
- * All row writes happen in one transaction, so a client fetching the feed
- * mid-reconciliation sees either the old or the new item set — never an
- * in-between state such as an item (and its image URL) that is pruned moments
- * later. Image mirroring does network I/O, so item data is prepared before
- * the transaction opens and the write lock is only held for the row writes
- * themselves. Deleting a feed item cascades to its mirrored S3 image via
+ * The diff is written as plain sequential statements (the adapter runs
+ * without transactions — see payload.config.ts for why they must stay off),
+ * so a client fetching the feed mid-reconciliation can briefly see a
+ * partially applied item set; the window is only the row writes themselves,
+ * since image mirroring (network I/O) happens while the diff is prepared.
+ * Concurrent refreshes of the same source are guarded by the unique
+ * (source, externalId) index — the loser fails and is recorded as a failed
+ * fetch. Deleting a feed item cascades to its mirrored S3 image via
  * FeedItems.afterDelete.
  *
  * Returns what the reconciliation did, so callers can report it (e.g. the
@@ -125,9 +126,9 @@ export async function storeItems(
   )
 
   // Prepare all document data up front: buildItemData mirrors images (network
-  // I/O), which must not run while the transaction below holds the write lock.
-  // Updates refresh stored items the fetch returned again (content edits, and
-  // the signed-CDN→bucket URL rewrite in resolveImage); stored items the fetch
+  // I/O), so doing it here keeps the row-write phase below short. Updates
+  // refresh stored items the fetch returned again (content edits, and the
+  // signed-CDN→bucket URL rewrite in resolveImage); stored items the fetch
   // didn't return are left untouched.
   const updates: { id: number; data: FeedItemData }[] = []
   for (const entry of target) {
@@ -150,44 +151,23 @@ export async function storeItems(
   }
   if (updates.length === 0 && deletes.length === 0 && creates.length === 0) return changes
 
-  // Apply the diff. With the adapter's transactions disabled (see
-  // payload.config.ts) `beginTransaction` returns null and this runs as
-  // sequential autocommit writes; the transaction branch is kept for the day
-  // transactions are safe to re-enable. Hooks receive `req` either way, so the
-  // afterDelete media cascade and the afterChange activity count follow along.
-  //
-  // Whole reconciliations are serialized through the process-wide write lock,
-  // so two refreshes never interleave their row writes — everything slow was
-  // prepared above, so the lock is only held for the writes themselves.
-  await withDbWriteLock(async () => {
-    const transactionID = (await payload.db.beginTransaction()) ?? undefined
-    const req = (transactionID !== undefined ? { transactionID } : undefined) as
-      | PayloadRequest
-      | undefined
-    try {
-      for (const update of updates) {
-        await payload.update({ collection: 'feed-items', id: update.id, data: update.data, depth: 0, req })
-      }
-      for (const doomed of deletes) {
-        await payload.delete({ collection: 'feed-items', id: doomed.id, depth: 0, req })
-      }
-      for (const data of creates) {
-        await payload.create({
-          collection: 'feed-items',
-          data,
-          depth: 0,
-          // FeedItems.afterChange counts each created item as daily activity
-          // unless told not to.
-          context: { skipActivity },
-          req,
-        })
-      }
-      if (transactionID !== undefined) await payload.db.commitTransaction(transactionID)
-    } catch (err) {
-      if (transactionID !== undefined) await payload.db.rollbackTransaction(transactionID)
-      throw err
-    }
-  })
+  // Apply the diff sequentially.
+  for (const update of updates) {
+    await payload.update({ collection: 'feed-items', id: update.id, data: update.data, depth: 0 })
+  }
+  for (const doomed of deletes) {
+    await payload.delete({ collection: 'feed-items', id: doomed.id, depth: 0 })
+  }
+  for (const data of creates) {
+    await payload.create({
+      collection: 'feed-items',
+      data,
+      depth: 0,
+      // FeedItems.afterChange counts each created item as daily activity
+      // unless told not to.
+      context: { skipActivity },
+    })
+  }
   return changes
 }
 
@@ -388,21 +368,19 @@ export async function recordFetchOutcome(
   result: RefreshResult,
   extraFields: ProfileImageFields = {},
 ): Promise<void> {
-  await withDbWriteLock(() =>
-    payload.update({
-      collection: 'sources',
-      id: sourceId,
-      data: {
-        lastFetchedAt: new Date().toISOString(),
-        lastFetchStatus: result.status,
-        lastFetchError: result.error ?? null,
-        lastFetchDebug: result.debug ?? {},
-        ...extraFields,
-      },
-      depth: 0,
-      context: { skipSourceRefresh: true },
-    }),
-  )
+  await payload.update({
+    collection: 'sources',
+    id: sourceId,
+    data: {
+      lastFetchedAt: new Date().toISOString(),
+      lastFetchStatus: result.status,
+      lastFetchError: result.error ?? null,
+      lastFetchDebug: result.debug ?? {},
+      ...extraFields,
+    },
+    depth: 0,
+    context: { skipSourceRefresh: true },
+  })
 
   // Append request-log rows for the trend chart / per-source health bar. This
   // is history (the source fields above only hold the latest outcome), pruned
@@ -438,7 +416,7 @@ export async function recordFetchOutcome(
             },
           ]
     for (const data of rows) {
-      await withDbWriteLock(() => payload.create({ collection: 'request-logs', data, depth: 0 }))
+      await payload.create({ collection: 'request-logs', data, depth: 0 })
     }
   } catch (err) {
     payload.logger.warn(`Could not write request log for source ${sourceId}: ${describeError(err)}`)
