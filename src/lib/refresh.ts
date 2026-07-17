@@ -150,16 +150,15 @@ export async function storeItems(
   }
   if (updates.length === 0 && deletes.length === 0 && creates.length === 0) return changes
 
-  // Commit the whole diff atomically. Hooks receive `req`, so the afterDelete
-  // media cascade and the afterChange activity count join the transaction and
-  // roll back with it. `beginTransaction` returns null when the adapter has
-  // transactions disabled — then this degrades to sequential writes.
+  // Apply the diff. With the adapter's transactions disabled (see
+  // payload.config.ts) `beginTransaction` returns null and this runs as
+  // sequential autocommit writes; the transaction branch is kept for the day
+  // transactions are safe to re-enable. Hooks receive `req` either way, so the
+  // afterDelete media cascade and the afterChange activity count follow along.
   //
-  // The transaction opens with BEGIN IMMEDIATE on its own SQLite connection,
-  // so two reconciliations running at once (feed requests refreshing different
-  // sources) would contend for the write lock — which in-process is fatal, not
-  // just slow (see dbWriteLock.ts). Everything slow was prepared above, so the
-  // lock is only held for the row writes themselves.
+  // Whole reconciliations are serialized through the process-wide write lock,
+  // so two refreshes never interleave their row writes — everything slow was
+  // prepared above, so the lock is only held for the writes themselves.
   await withDbWriteLock(async () => {
     const transactionID = (await payload.db.beginTransaction()) ?? undefined
     const req = (transactionID !== undefined ? { transactionID } : undefined) as
