@@ -169,6 +169,21 @@ export default buildConfig({
   db: sqliteAdapter({
     client: {
       url: process.env.DATABASE_URL || 'file:./rss-parser.db',
+      // Busy timeout for EVERY connection the libsql client opens. The
+      // adapter-level `busyTimeout` below is a PRAGMA run once on the initial
+      // connection — but @libsql/client's local-file driver discards its
+      // connection whenever a transaction starts and lazily opens a fresh one,
+      // which would otherwise run with busy_timeout=0 and turn any write
+      // contention into an instant SQLITE_BUSY. Requires @libsql/client
+      // >= 0.17 (pnpm override in package.json; Payload still pins 0.14).
+      //
+      // This absorbs contention from other PROCESSES (the old container during
+      // a rolling deploy, boot-time migrations, a stray CLI). Contention
+      // between writers within this process cannot be fixed by any timeout —
+      // libsql executes statements synchronously, so a waiter blocks the event
+      // loop and the in-process lock holder can never commit; those writers
+      // are serialized instead (see src/lib/dbWriteLock.ts).
+      timeout: 5000,
     },
     // Transactions are off by default for SQLite; the feed reconciliation
     // (storeItems in src/lib/refresh.ts) relies on them to commit its diff

@@ -2,6 +2,7 @@ import type { Payload, PayloadRequest } from 'payload'
 
 import { getAdapter } from '@/adapters/registry'
 import type { AttemptRecord, NormalizedItem } from '@/adapters/types'
+import { withDbWriteLock } from '@/lib/dbWriteLock'
 import { escapeHtml } from '@/lib/html'
 import { getMaxFetchAttempts, getMaxItemsPerFeed } from '@/lib/limits'
 import { outboundFetch } from '@/lib/proxy'
@@ -153,33 +154,41 @@ export async function storeItems(
   // media cascade and the afterChange activity count join the transaction and
   // roll back with it. `beginTransaction` returns null when the adapter has
   // transactions disabled — then this degrades to sequential writes.
-  const transactionID = (await payload.db.beginTransaction()) ?? undefined
-  const req = (transactionID !== undefined ? { transactionID } : undefined) as
-    | PayloadRequest
-    | undefined
-  try {
-    for (const update of updates) {
-      await payload.update({ collection: 'feed-items', id: update.id, data: update.data, depth: 0, req })
+  //
+  // The transaction opens with BEGIN IMMEDIATE on its own SQLite connection,
+  // so two reconciliations running at once (feed requests refreshing different
+  // sources) would contend for the write lock — which in-process is fatal, not
+  // just slow (see dbWriteLock.ts). Everything slow was prepared above, so the
+  // lock is only held for the row writes themselves.
+  await withDbWriteLock(async () => {
+    const transactionID = (await payload.db.beginTransaction()) ?? undefined
+    const req = (transactionID !== undefined ? { transactionID } : undefined) as
+      | PayloadRequest
+      | undefined
+    try {
+      for (const update of updates) {
+        await payload.update({ collection: 'feed-items', id: update.id, data: update.data, depth: 0, req })
+      }
+      for (const doomed of deletes) {
+        await payload.delete({ collection: 'feed-items', id: doomed.id, depth: 0, req })
+      }
+      for (const data of creates) {
+        await payload.create({
+          collection: 'feed-items',
+          data,
+          depth: 0,
+          // FeedItems.afterChange counts each created item as daily activity
+          // unless told not to.
+          context: { skipActivity },
+          req,
+        })
+      }
+      if (transactionID !== undefined) await payload.db.commitTransaction(transactionID)
+    } catch (err) {
+      if (transactionID !== undefined) await payload.db.rollbackTransaction(transactionID)
+      throw err
     }
-    for (const doomed of deletes) {
-      await payload.delete({ collection: 'feed-items', id: doomed.id, depth: 0, req })
-    }
-    for (const data of creates) {
-      await payload.create({
-        collection: 'feed-items',
-        data,
-        depth: 0,
-        // FeedItems.afterChange counts each created item as daily activity
-        // unless told not to.
-        context: { skipActivity },
-        req,
-      })
-    }
-    if (transactionID !== undefined) await payload.db.commitTransaction(transactionID)
-  } catch (err) {
-    if (transactionID !== undefined) await payload.db.rollbackTransaction(transactionID)
-    throw err
-  }
+  })
   return changes
 }
 
@@ -380,19 +389,21 @@ export async function recordFetchOutcome(
   result: RefreshResult,
   extraFields: ProfileImageFields = {},
 ): Promise<void> {
-  await payload.update({
-    collection: 'sources',
-    id: sourceId,
-    data: {
-      lastFetchedAt: new Date().toISOString(),
-      lastFetchStatus: result.status,
-      lastFetchError: result.error ?? null,
-      lastFetchDebug: result.debug ?? {},
-      ...extraFields,
-    },
-    depth: 0,
-    context: { skipSourceRefresh: true },
-  })
+  await withDbWriteLock(() =>
+    payload.update({
+      collection: 'sources',
+      id: sourceId,
+      data: {
+        lastFetchedAt: new Date().toISOString(),
+        lastFetchStatus: result.status,
+        lastFetchError: result.error ?? null,
+        lastFetchDebug: result.debug ?? {},
+        ...extraFields,
+      },
+      depth: 0,
+      context: { skipSourceRefresh: true },
+    }),
+  )
 
   // Append request-log rows for the trend chart / per-source health bar. This
   // is history (the source fields above only hold the latest outcome), pruned
@@ -428,7 +439,7 @@ export async function recordFetchOutcome(
             },
           ]
     for (const data of rows) {
-      await payload.create({ collection: 'request-logs', data, depth: 0 })
+      await withDbWriteLock(() => payload.create({ collection: 'request-logs', data, depth: 0 }))
     }
   } catch (err) {
     payload.logger.warn(`Could not write request log for source ${sourceId}: ${describeError(err)}`)

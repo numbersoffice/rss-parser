@@ -48,6 +48,9 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "unrs-resolver"
-    ]
+    ],
+    "overrides": {
+      "@libsql/client": "^0.17.4"
+    }
   }
 }

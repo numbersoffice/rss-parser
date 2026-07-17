@@ -1,5 +1,6 @@
 import type { TaskConfig } from 'payload'
 
+import { withDbWriteLock } from '@/lib/dbWriteLock'
 import { describeError, mirrorImageUrl, resolveProfileImage } from '@/lib/refresh'
 import { isPublicS3Url, s3Enabled } from '@/lib/s3'
 import type { Source } from '@/payload-types'
@@ -57,12 +58,16 @@ export const mirrorSourceImagesTask: TaskConfig<'mirrorSourceImages'> = {
               externalId: it.externalId,
               content: it.content ?? '',
             })
-            await payload.update({
-              collection: 'feed-items',
-              id: it.id,
-              data: { imageUrl: result.imageUrl, image: result.image, content: result.content },
-              depth: 0,
-            })
+            // The download/upload above ran unguarded; only the row write
+            // itself takes the lock (see dbWriteLock.ts).
+            await withDbWriteLock(() =>
+              payload.update({
+                collection: 'feed-items',
+                id: it.id,
+                data: { imageUrl: result.imageUrl, image: result.image, content: result.content },
+                depth: 0,
+              }),
+            )
             mirrored++
           } catch (err) {
             // Leave it on the CDN URL — a later run (or refresh) retries.
@@ -79,13 +84,15 @@ export const mirrorSourceImagesTask: TaskConfig<'mirrorSourceImages'> = {
     if (source.profileImageUrl && !isPublicS3Url(source.profileImageUrl)) {
       const profileFields = await resolveProfileImage(payload, source, source.profileImageUrl, true)
       if (profileFields.profileImage) {
-        await payload.update({
-          collection: 'sources',
-          id: source.id,
-          data: profileFields,
-          depth: 0,
-          context: { skipSourceRefresh: true },
-        })
+        await withDbWriteLock(() =>
+          payload.update({
+            collection: 'sources',
+            id: source.id,
+            data: profileFields,
+            depth: 0,
+            context: { skipSourceRefresh: true },
+          }),
+        )
       }
     }
 
