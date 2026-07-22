@@ -26,14 +26,38 @@ const SESSION_PLACEHOLDER = '{session}'
 // One dispatcher per resolved proxy URL. Distinct session ids resolve to
 // distinct URLs and thus distinct agents/IPs; requests sharing an id reuse the
 // same agent (and connection pool), so a prime+fetch pair stays on one IP.
+//
+// Retries rotate to a *random* session id (see the Instagram adapter), so each
+// retry resolves to a fresh URL. This cache is therefore bounded as an LRU —
+// otherwise it would grow without limit, one leaked ProxyAgent (and its
+// connection pool) per retry, forever. Stable per-source sessions stay hot and
+// are never evicted under normal load; evicted agents are closed so their
+// sockets are released. Map iteration order is insertion order, so the first
+// key is the least-recently used once we re-insert on hit.
+const MAX_DISPATCHERS = 64
 const dispatchers = new Map<string, ProxyAgent>()
 
 function dispatcherFor(proxyUrl: string): ProxyAgent {
-  let agent = dispatchers.get(proxyUrl)
-  if (!agent) {
-    agent = new ProxyAgent(proxyUrl)
-    dispatchers.set(proxyUrl, agent)
+  const existing = dispatchers.get(proxyUrl)
+  if (existing) {
+    // Mark most-recently used.
+    dispatchers.delete(proxyUrl)
+    dispatchers.set(proxyUrl, existing)
+    return existing
   }
+
+  const agent = new ProxyAgent(proxyUrl)
+  dispatchers.set(proxyUrl, agent)
+
+  if (dispatchers.size > MAX_DISPATCHERS) {
+    const oldestKey = dispatchers.keys().next().value as string
+    const oldest = dispatchers.get(oldestKey)
+    dispatchers.delete(oldestKey)
+    // Drain the pool so idle sockets are freed. `close()` lets in-flight
+    // requests finish; fire-and-forget since we no longer reference it.
+    if (oldest) void oldest.close().catch(() => {})
+  }
+
   return agent
 }
 
