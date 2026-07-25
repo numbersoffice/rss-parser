@@ -125,10 +125,11 @@ export default buildConfig({
           'Self-hostable tool that turns public Instagram accounts into plain RSS feeds. ' +
           'Add a handle, get a private feed URL, paste it into your reader.',
         siteName: 'RSS Parser',
-        // stable social-image URL served by src/app/og/route.ts
+        // Pre-generated static social image (public/og.png) — served directly,
+        // never rendered at request time.
         images: [
           {
-            url: `${process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000'}/og`,
+            url: `${process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000'}/og.png`,
             width: 1200,
             height: 630,
           },

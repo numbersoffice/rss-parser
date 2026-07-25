@@ -23,11 +23,15 @@ export const metadata: Metadata = {
     title,
     description,
     locale: 'en',
+    // Pre-generated static image (public/og.png) reused across all pages —
+    // never rendered at request time. See public/og.png.
+    images: ['/og.png'],
   },
   twitter: {
     card: 'summary_large_image',
     title,
     description,
+    images: ['/og.png'],
   },
 }
 

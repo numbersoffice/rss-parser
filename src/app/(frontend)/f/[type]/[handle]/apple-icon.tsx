@@ -1,6 +1,6 @@
-import { ImageResponse } from 'next/og'
-import React from 'react'
+import { redirect } from 'next/navigation'
 
+import { isPublicS3Url } from '@/lib/s3'
 import { getSource } from './getSource'
 
 // 180×180 is the size iOS/readers expect for apple-touch-icon.
@@ -14,47 +14,25 @@ export const contentType = 'image/png'
  * platform's own logo favicon. Co-located `icon.tsx` re-exports this for the
  * plain <link rel="icon">. Both override the app-root icon.png/apple-icon.png
  * for this route only.
+ *
+ * The avatar is already mirrored into our public bucket once per source (see
+ * resolveProfileImage in lib/refresh.ts), so we redirect straight to that
+ * stable URL rather than re-rasterising the image through next/og on every
+ * request — reader polls across every feed made that the server's dominant
+ * cost. When a source has no mirrored copy yet (profileImageUrl is still a
+ * platform CDN URL that readers can't fetch), fall back to a pre-generated
+ * neutral tile instead of the platform's own logo.
  */
-export default async function AppleIcon({ params }: { params: Promise<{ type: string; handle: string }> }) {
+export default async function AppleIcon({
+  params,
+}: {
+  params: Promise<{ type: string; handle: string }>
+}) {
   const { type, handle } = await params
   const source = await getSource(type, handle)
 
-  if (source?.profileImageUrl) {
-    return new ImageResponse(
-      (
-        <img
-          src={source.profileImageUrl}
-          width={size.width}
-          height={size.height}
-          style={{ objectFit: 'cover' }}
-          alt=""
-        />
-      ),
-      size,
-    )
-  }
+  const url = source?.profileImageUrl
+  if (url && isPublicS3Url(url)) redirect(url)
 
-  // No mirrored avatar yet — a neutral tile in the landing page's palette
-  // rather than falling back to the platform's logo.
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#ffffff',
-          color: '#000000',
-          fontFamily: 'monospace',
-          fontSize: 96,
-          fontWeight: 700,
-        }}
-      >
-        ~/
-      </div>
-    ),
-    size,
-  )
+  redirect('/feed-icon-fallback.png')
 }
