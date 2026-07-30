@@ -203,7 +203,7 @@ export function renderLanding(
   const recent = items
     .map(
       (item) =>
-        `  <li><div class="row"><span class="meta mono">${new Date(item.published_at).toISOString().slice(0, 10)}</span> <a href="${escapeHtml(item.url)}" title="${escapeHtml(item.title)}">${escapeHtml(truncate(item.title, 5))}</a></div></li>`,
+        `  <li><div class="row"><span class="meta mono">${new Date(item.published_at).toISOString().slice(0, 10)}</span> <a href="${escapeHtml(item.url)}" title="${escapeHtml(item.title)}">${escapeHtml(truncate(item.title, 50))}</a></div></li>`,
     )
     .join('\n')
 
