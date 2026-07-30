@@ -38,10 +38,10 @@ const STYLES = `
   a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   ul { list-style: none; margin: 1.25rem 0; padding: 0; }
   li { padding: .9rem 0; display: grid; gap: .45rem; }
-  .row { display: flex; flex-wrap: wrap; align-items: baseline; gap: .55rem; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; }
   .handle { font-weight: 700; }
   .avatar {
-    width: 34px; height: 34px; object-fit: cover; align-self: center;
+    width: 34px; height: 34px; object-fit: cover;
     background: var(--line); flex: none;
   }
   .feed {
@@ -154,7 +154,7 @@ export function renderIndex(
     </div>
     <a class="feed mono" href="${escapeHtml(feedUrl)}">${escapeHtml(feedUrl)}</a>
     ${error ? `<div class="err">${escapeHtml(error)}</div>` : ''}
-    <div class="meta"><a href="${escapeHtml(landingUrl(source))}">about</a> · <a href="${escapeHtml(sourceLink(source))}">on instagram</a></div>
+    <div class="meta"><a href="${escapeHtml(landingUrl(source))}">about</a></div>
   </li>`
     })
     .join('\n')
