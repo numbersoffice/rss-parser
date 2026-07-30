@@ -178,7 +178,7 @@ export function renderIndex(
     'Feeds — rss-parser',
     '',
     `<h1>Feeds</h1>
-<p class="sub">${sources.length} Instagram account${sources.length === 1 ? '' : 's'} published as RSS. The list comes from <code>accounts.txt</code>.</p>
+<p class="sub">${sources.length} Instagram account${sources.length === 1 ? '' : 's'} published as RSS. The list comes from <a href="https://github.com/numbersoffice/rss-parser/blob/main/accounts.txt"><code>accounts.txt</code></a>.</p>
 ${body}
 <footer>Refreshed every ${config.refreshIntervalMinutes} minutes, keeping the newest ${config.maxItemsPerFeed} posts per feed.<br />
 Mirrored images: <strong>${formatBytes(usage.bytes)}</strong> across ${usage.files} file${usage.files === 1 ? '' : 's'}.</footer>`,
