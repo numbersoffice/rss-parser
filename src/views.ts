@@ -11,56 +11,64 @@ import { feedUrlFor, landingUrl, sourceLink } from './lib/rss.js'
  * framework: one status page and one tiny landing page don't justify either.
  */
 
+/*
+ * Deliberately low-fi, as the pre-rewrite landing page was: one system monospace
+ * stack, no webfonts, no external requests. Black on white paper, default browser
+ * link blue as the only accent, dashed hairlines instead of cards, and a hard
+ * offset shadow on framed elements.
+ */
 const STYLES = `
   :root {
-    color-scheme: light dark;
-    --bg: #fbfbfa; --fg: #1a1a1a; --muted: #6b6b6b; --line: #e4e4e1;
-    --card: #ffffff; --accent: #b4530a; --ok: #2f7a3d; --bad: #b3261e;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #16161a; --fg: #e8e8e6; --muted: #9a9a96; --line: #2c2c33;
-      --card: #1d1d22; --accent: #f0913f; --ok: #6cc286; --bad: #f2837c;
-    }
+    --bg: #ffffff; --fg: #000000; --muted: #8a8a8a; --line: #cccccc;
+    --accent: #0000ee; --visited: #551a8b; --bad: #cc0000;
+    --hairline: 1px dashed var(--line);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   }
   * { box-sizing: border-box; }
+  html { background: var(--bg); -webkit-font-smoothing: antialiased; }
   body {
-    margin: 0; padding: 2.5rem 1.25rem 4rem; background: var(--bg); color: var(--fg);
-    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0; padding: 3rem 1.25rem 2rem; background: var(--bg); color: var(--fg);
+    font: 15px/1.7 var(--mono);
   }
-  main { max-width: 54rem; margin: 0 auto; }
-  h1 { font-size: 1.35rem; margin: 0 0 .3rem; letter-spacing: -.01em; }
-  .sub { color: var(--muted); margin: 0 0 2rem; font-size: .9rem; }
-  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
+  main { max-width: 44rem; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 700; margin: 0 0 .3rem; }
+  .sub { color: var(--muted); margin: 0 0 2rem; font-size: 13px; }
+  code, .mono { font-family: var(--mono); font-size: .82rem; }
   a { color: var(--accent); }
-  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+  a:visited { color: var(--visited); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ul { list-style: none; margin: 1.25rem 0; padding: 0; }
   li {
-    background: var(--card); border: 1px solid var(--line); border-radius: 9px;
-    padding: .8rem .95rem; display: grid; gap: .45rem;
+    padding: .75rem 0; display: grid; gap: .45rem;
+    border-bottom: var(--hairline);
   }
+  li:first-child { border-top: var(--hairline); }
   .row { display: flex; flex-wrap: wrap; align-items: baseline; gap: .55rem; }
-  .handle { font-weight: 600; }
+  .handle { font-weight: 700; }
   .avatar {
-    width: 30px; height: 30px; border-radius: 50%; object-fit: cover;
-    background: var(--line); flex: none;
+    width: 34px; height: 34px; object-fit: cover; align-self: center;
+    border: 1px solid var(--fg); box-shadow: 2px 2px 0 var(--accent);
+    background: var(--bg); flex: none;
   }
   .feed {
-    display: block; overflow-x: auto; white-space: nowrap;
-    background: color-mix(in srgb, var(--fg) 5%, transparent);
-    border-radius: 5px; padding: .32rem .5rem;
+    display: block; overflow-x: auto; white-space: nowrap; font-size: 13px;
+    border: 1px solid var(--fg); box-shadow: 2px 2px 0 var(--accent);
+    padding: .4rem .6rem;
   }
-  .meta { color: var(--muted); font-size: .8rem; }
-  .badge { font-size: .72rem; padding: .1rem .42rem; border-radius: 4px; border: 1px solid; }
-  .badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
-  .badge.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
-  .badge.wait { color: var(--muted); border-color: var(--line); }
-  .rate {
-    font-size: .72rem; padding: .1rem .42rem; border-radius: 4px; cursor: help;
-    color: var(--fg); background: color-mix(in srgb, var(--fg) 8%, transparent);
+  .meta { color: var(--muted); font-size: 13px; }
+  .badge { font-size: 12px; }
+  .badge::before { content: "["; }
+  .badge::after { content: "]"; }
+  .badge.ok { color: var(--accent); }
+  .badge.bad { color: var(--bad); }
+  .badge.wait { color: var(--muted); }
+  .rate { font-size: 12px; color: var(--muted); cursor: help; }
+  .err { color: var(--bad); font-size: 13px; word-break: break-word; }
+  footer {
+    margin-top: 3.5rem; padding-top: .75rem; border-top: var(--hairline);
+    color: var(--muted); font-size: 13px;
   }
-  .err { color: var(--bad); font-size: .8rem; word-break: break-word; }
-  footer { margin-top: 2.5rem; color: var(--muted); font-size: .8rem; }
-  .empty { background: var(--card); border: 1px dashed var(--line); border-radius: 9px; padding: 1.5rem; }
+  .empty { border: var(--hairline); padding: 1.5rem; }
 `
 
 const layout = (title: string, head: string, body: string): string =>
