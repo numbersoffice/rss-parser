@@ -1,6 +1,7 @@
 import { prefixForType } from './adapters/registry.js'
 import { config } from './config.js'
 import type { ItemRow, SourceRow } from './db.js'
+import { type Average, formatPerDay } from './lib/activity.js'
 import { escapeHtml } from './lib/html.js'
 import { feedUrlFor, landingUrl, sourceLink } from './lib/rss.js'
 
@@ -52,6 +53,10 @@ const STYLES = `
   .badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
   .badge.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
   .badge.wait { color: var(--muted); border-color: var(--line); }
+  .rate {
+    font-size: .72rem; padding: .1rem .42rem; border-radius: 4px; cursor: help;
+    color: var(--fg); background: color-mix(in srgb, var(--fg) 8%, transparent);
+  }
   .err { color: var(--bad); font-size: .8rem; word-break: break-word; }
   footer { margin-top: 2.5rem; color: var(--muted); font-size: .8rem; }
   .empty { background: var(--card); border: 1px dashed var(--line); border-radius: 9px; padding: 1.5rem; }
@@ -93,6 +98,19 @@ function until(ms: number): string {
   return `in ${Math.round(minutes / 60)}h`
 }
 
+/**
+ * How many new posts a feed gets per day. Carries the underlying figures in a
+ * tooltip so the number can be sanity-checked without opening the database, and
+ * renders nothing at all for a feed that hasn't been fetched yet — there is no
+ * observation period to average over.
+ */
+function perDayBadge(average: Average | null | undefined): string {
+  if (!average) return ''
+  const days = Math.round(average.days)
+  const title = `${average.posts} new post${average.posts === 1 ? '' : 's'} over ${days} day${days === 1 ? '' : 's'}`
+  return `<span class="rate" title="${escapeHtml(title)}">${formatPerDay(average.perDay)}/day</span>`
+}
+
 function statusBadge(source: SourceRow): string {
   if (source.permanent_error) return '<span class="badge bad">broken</span>'
   if (source.last_fetch_status === 'error') return '<span class="badge bad">failing</span>'
@@ -101,7 +119,11 @@ function statusBadge(source: SourceRow): string {
 }
 
 /** The single page listing every published feed. */
-export function renderIndex(sources: SourceRow[], counts: Map<number, number>): string {
+export function renderIndex(
+  sources: SourceRow[],
+  counts: Map<number, number>,
+  averages: Map<number, Average | null>,
+): string {
   const items = sources
     .map((source) => {
       const feedUrl = feedUrlFor(source)
@@ -118,6 +140,7 @@ export function renderIndex(sources: SourceRow[], counts: Map<number, number>): 
       ${avatar}
       <span class="handle">@${escapeHtml(source.handle)}</span>
       ${statusBadge(source)}
+      ${perDayBadge(averages.get(source.id))}
       <span class="meta">${count} post${count === 1 ? '' : 's'} · updated ${escapeHtml(ago(source.last_fetched_at))} · next ${escapeHtml(until(source.next_fetch_at))}</span>
     </div>
     <a class="feed mono" href="${escapeHtml(feedUrl)}">${escapeHtml(feedUrl)}</a>
@@ -151,7 +174,11 @@ ${body}
  * Unlike the Next.js version, the icon <link> tags have to be written out
  * explicitly — there is no file-convention magic injecting them.
  */
-export function renderLanding(source: SourceRow, items: ItemRow[]): string {
+export function renderLanding(
+  source: SourceRow,
+  items: ItemRow[],
+  average: Average | null,
+): string {
   const icon = `${config.publicBaseUrl}/f/${prefixForType(source.type)}/${encodeURIComponent(source.handle)}/icon`
   const head =
     `<link rel="icon" href="${escapeHtml(icon)}" sizes="any" />\n` +
@@ -169,7 +196,11 @@ export function renderLanding(source: SourceRow, items: ItemRow[]): string {
     source.name,
     head,
     `<h1>${escapeHtml(source.name)}</h1>
-<p class="sub">Instagram posts by <a href="${escapeHtml(sourceLink(source))}">@${escapeHtml(source.handle)}</a>, as RSS.</p>
+<p class="sub">Instagram posts by <a href="${escapeHtml(sourceLink(source))}">@${escapeHtml(source.handle)}</a>, as RSS.${
+      average
+        ? ` Averaging <strong>${formatPerDay(average.perDay)}</strong> new posts per day.`
+        : ''
+    }</p>
 <a class="feed mono" href="${escapeHtml(feedUrlFor(source))}">${escapeHtml(feedUrlFor(source))}</a>
 ${items.length ? `<ul style="margin-top:1.5rem">\n${recent}\n</ul>` : '<p class="meta" style="margin-top:1.5rem">No posts cached yet.</p>'}
 <footer><a href="${escapeHtml(config.publicBaseUrl)}/">All feeds</a></footer>`,

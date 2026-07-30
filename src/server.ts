@@ -11,10 +11,13 @@ import {
   initDb,
   listItemsForFeed,
   listSources,
+  postsInWindow,
+  postsInWindowBySource,
 } from './db.js'
+import { type Average, averagePerDay, windowStartDay } from './lib/activity.js'
 import { log } from './log.js'
 import { invalidateAccountsCache, syncAccounts } from './jobs/syncAccounts.js'
-import { pruneFetchLog } from './jobs/pruneFetchLog.js'
+import { pruneHistory } from './jobs/pruneHistory.js'
 import { refreshFeeds } from './jobs/refreshFeeds.js'
 import { Scheduler } from './jobs/scheduler.js'
 import { sweepAssets } from './jobs/sweepAssets.js'
@@ -47,8 +50,16 @@ app.get('/healthz', (_req, res) => {
 })
 
 app.get('/', (_req, res) => {
+  const sources = listSources()
+  const posts = postsInWindowBySource(windowStartDay(config.activityWindowDays))
+  const averages = new Map<number, Average | null>(
+    sources.map((source) => [
+      source.id,
+      averagePerDay(posts.get(source.id) ?? 0, source.first_success_at, config.activityWindowDays),
+    ]),
+  )
   res.set('cache-control', 'no-store')
-  res.type('html').send(renderIndex(listSources(), countItemsBySource()))
+  res.type('html').send(renderIndex(sources, countItemsBySource(), averages))
 })
 
 /**
@@ -94,8 +105,10 @@ app.get('/feeds/:prefix/:handle.xml', (req, res) => {
 app.get('/f/:prefix/:handle', (req, res, next) => {
   const source = lookup(req.params.prefix, req.params.handle)
   if (!source) return next()
+  const posts = postsInWindow(source.id, windowStartDay(config.activityWindowDays))
+  const average = averagePerDay(posts, source.first_success_at, config.activityWindowDays)
   res.set('cache-control', 'public, max-age=3600')
-  res.type('html').send(renderLanding(source, listItemsForFeed(source.id, 15)))
+  res.type('html').send(renderLanding(source, listItemsForFeed(source.id, 15), average))
 })
 
 /**
@@ -152,7 +165,7 @@ function lookup(prefix: string | undefined, rawHandle: string | undefined) {
 const scheduler = new Scheduler([
   { name: 'sync-accounts', everyMs: config.tickIntervalMs, run: syncAccounts },
   { name: 'refresh-feeds', everyMs: config.tickIntervalMs, run: refreshFeeds },
-  { name: 'prune-fetch-log', everyMs: DAY_MS, run: pruneFetchLog },
+  { name: 'prune-history', everyMs: DAY_MS, run: pruneHistory },
   { name: 'sweep-assets', everyMs: DAY_MS, run: sweepAssets },
 ])
 

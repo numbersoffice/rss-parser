@@ -115,11 +115,24 @@ export async function refreshSource(sourceId: number): Promise<RefreshResult> {
   const httpStatus = typeof debug.httpStatus === 'number' ? debug.httpStatus : null
   const durationMs = typeof debug.durationMs === 'number' ? debug.durationMs : null
 
+  // The first successful fetch seeds a whole feed at once — that's a backfill,
+  // not a day's posting, and counting it would put a spike at the start of every
+  // feed's history. Everything created after it is genuinely new: the reconcile
+  // never inserts a fetched post that falls outside the cap, so an old pinned
+  // post the platform keeps re-serving can't register as phantom activity
+  // either.
+  //
+  // A feed that was broken for a week and then recovers does attribute its
+  // catch-up posts to the recovery day. That's rare, it washes out as the window
+  // rolls, and suppressing it would cost more than it's worth.
+  const newPosts = source.first_success_at === null ? 0 : creates.length
+
   const outcome: SourceOutcome = {
     status: 'success',
     error: null,
     httpStatus,
     durationMs,
+    newPosts,
     nextFetchAt: Date.now() + config.refreshIntervalMinutes * 60_000,
     consecutiveFailures: 0,
     permanentError: null,
@@ -195,6 +208,7 @@ function recordFailure(
       permanentErrorKind: permanent ? (err as PermanentFetchError).kind : null,
       // The feed body is unchanged, so cached ETags stay valid.
       bumpUpdatedAt: false,
+      newPosts: 0,
     },
     attemptLog(source.id, fetchId, debug, { status: 'error', httpStatus, durationMs, error }),
   )

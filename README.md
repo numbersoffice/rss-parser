@@ -78,12 +78,12 @@ serves the account's own avatar as its icon.
 A single 60-second tick runs four jobs. Each logs one line per run, and a job
 still running from a previous tick is skipped rather than overlapped.
 
-| Job               | Every | What it does                                  |
-| ----------------- | ----- | --------------------------------------------- |
-| `sync-accounts`   | 1 min | Diffs `accounts.txt` against the database     |
-| `refresh-feeds`   | 1 min | Refreshes up to 3 due accounts, one at a time |
-| `prune-fetch-log` | 24 h  | Drops fetch records older than 7 days         |
-| `sweep-assets`    | 24 h  | Deletes image files no post references        |
+| Job             | Every | What it does                                         |
+| --------------- | ----- | ---------------------------------------------------- |
+| `sync-accounts` | 1 min | Diffs `accounts.txt` against the database            |
+| `refresh-feeds` | 1 min | Refreshes up to 3 due accounts, one at a time        |
+| `prune-history` | 24 h  | Drops fetch records and day counts past their window |
+| `sweep-assets`  | 24 h  | Deletes image files no post references               |
 
 Refreshes are **sequential with a 5-second gap**, never parallel. That's the
 whole throttling strategy: it keeps at most one Instagram request in flight,
@@ -119,6 +119,30 @@ Images are ~95% of the bytes this app pulls, so by default they're fetched
 signed URLs to any IP, while the profile API is the part that actually needs a
 residential exit. Set `imageFetch` in `src/config.ts` to `'proxy'` or `'direct'`
 to override.
+
+### Posts per day
+
+Each feed on the index page carries a small `3.4/day` figure — how many new posts
+that account has been producing. It's the number that predicts which feeds are
+expensive, since new posts are the only thing that costs outbound bandwidth
+(each one is a fetch plus an image download). Hover it for the underlying
+figures; the per-feed landing page shows the same number in prose.
+
+New posts are counted into a sparse per-day bucket as they're stored, inside the
+same transaction that stores them, so the count can't drift from the posts it
+counts. The average divides by **elapsed days observed**, not by the days that
+happened to have posts — otherwise a feed that posted 20 times one day and then
+went quiet would outrank one posting 15 every day.
+
+Two deliberate exclusions keep it honest:
+
+- A feed's **first fetch doesn't count.** It seeds up to a full feed at once,
+  which is a backfill, not a day's posting.
+- The denominator is **floored at one day**, so a feed added an hour ago that
+  picked up one post reads `1/day` rather than `24/day`.
+
+A feed that has never been fetched shows no figure at all rather than a made-up
+zero. The window is `activityWindowDays` in `src/config.ts` (30 days).
 
 ### Conditional requests
 
@@ -203,6 +227,7 @@ src/
     registry.ts       type → adapter, and the /feeds/{prefix} mapping
   lib/
     plan.ts           the reconciliation planner (pure, unit-tested)
+    activity.ts       posts-per-day arithmetic (pure, unit-tested)
     refresh.ts        fetch → plan → mirror → commit
     assets.ts         local image store
     rss.ts            RSS 2.0 rendering
@@ -211,7 +236,7 @@ src/
     errors.ts         flattens error causes into one readable message
   jobs/
     scheduler.ts      the tick loop
-    syncAccounts.ts refreshFeeds.ts pruneFetchLog.ts sweepAssets.ts
+    syncAccounts.ts refreshFeeds.ts pruneHistory.ts sweepAssets.ts
 ```
 
 The reconciliation planner is the one piece with real invariants — the stored

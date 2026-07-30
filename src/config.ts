@@ -124,6 +124,14 @@ export const config = {
   fetchLogRetentionDays: 7,
 
   /**
+   * How many days of daily post counts to keep and average over — the window
+   * behind the posts-per-day figure on each feed. Thirty rather than a week
+   * because an account that posts weekly needs more than one bucket before the
+   * average means anything; the rows are sparse, so the cost is nil.
+   */
+  activityWindowDays: 30,
+
+  /**
    * Grace period before the orphan sweep will unlink an unreferenced file. A
    * refresh writes image files before committing the rows that reference them,
    * so a sweep landing in that window must not delete a file that is about to

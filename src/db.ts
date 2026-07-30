@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import Database from 'better-sqlite3'
 
 import { assetsDir, config, dbFile, tmpDir } from './config.js'
+import { dayKey } from './lib/activity.js'
 import { log } from './log.js'
 
 /**
@@ -33,6 +34,12 @@ export interface SourceRow {
   next_fetch_at: number
   last_fetched_at: number | null
   last_success_at: number | null
+  /**
+   * The first fetch that returned posts — when we started observing this feed.
+   * It is the origin of the posts-per-day denominator, so that a feed added
+   * yesterday isn't averaged over the whole retention window.
+   */
+  first_success_at: number | null
   last_fetch_status: 'success' | 'error' | null
   last_fetch_error: string | null
   last_fetch_http_status: number | null
@@ -101,6 +108,7 @@ CREATE TABLE IF NOT EXISTS sources (
   next_fetch_at INTEGER NOT NULL,
   last_fetched_at INTEGER,
   last_success_at INTEGER,
+  first_success_at INTEGER,
   last_fetch_status TEXT CHECK (last_fetch_status IN ('success', 'error')),
   last_fetch_error TEXT,
   last_fetch_http_status INTEGER,
@@ -147,6 +155,18 @@ CREATE TABLE IF NOT EXISTS fetch_log (
 
 CREATE INDEX IF NOT EXISTS fetch_log_created ON fetch_log (created_at);
 
+-- New posts seen per feed per day. Sparse: a day with no new posts gets no row,
+-- so the averaging has to take its denominator from elapsed time rather than
+-- from how many rows exist (see lib/activity.ts).
+CREATE TABLE IF NOT EXISTS daily_posts (
+  source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  count INTEGER NOT NULL,
+  PRIMARY KEY (source_id, day)
+);
+
+CREATE INDEX IF NOT EXISTS daily_posts_day ON daily_posts (day);
+
 CREATE TABLE IF NOT EXISTS job_runs (
   name TEXT PRIMARY KEY,
   last_run_at INTEGER NOT NULL,
@@ -185,8 +205,33 @@ export function initDb(): Database.Database {
   db.exec(SCHEMA)
 
   database = db
+  addMissingColumns()
   rewriteBaseUrlIfChanged()
   return db
+}
+
+/**
+ * `CREATE TABLE IF NOT EXISTS` is a no-op on a database that already exists, so
+ * a column added to SCHEMA after the fact would never appear on a live install.
+ * Adding them explicitly keeps the schema evolvable without a migration
+ * framework — for a handful of tables that is the whole of what one would buy.
+ *
+ * Only additive, nullable columns belong here. Anything that needs backfilling
+ * or rewriting is a different problem and should be written as such.
+ */
+function addMissingColumns(): void {
+  const columns: [table: string, column: string, decl: string][] = [
+    ['sources', 'first_success_at', 'INTEGER'],
+  ]
+  for (const [table, column, decl] of columns) {
+    const existing = database!
+      .prepare<[], { name: string }>(`PRAGMA table_info(${table})`)
+      .all()
+      .map((row) => row.name)
+    if (existing.includes(column)) continue
+    database!.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`)
+    log.info('added missing column', { table, column })
+  }
 }
 
 /** Flush the WAL and close cleanly. Called on SIGTERM/SIGINT. */
@@ -322,6 +367,7 @@ export function deleteSource(id: number): string[] {
     // Explicit, so the cascade doesn't depend on the foreign_keys pragma.
     db().prepare('DELETE FROM items WHERE source_id = ?').run(id)
     db().prepare('DELETE FROM fetch_log WHERE source_id = ?').run(id)
+    db().prepare('DELETE FROM daily_posts WHERE source_id = ?').run(id)
     db().prepare('DELETE FROM sources WHERE id = ?').run(id)
   })()
 
@@ -394,6 +440,12 @@ export interface SourceOutcome {
   profileAsset?: string | null
   /** True when the feed body changed and every cached ETag must be invalidated. */
   bumpUpdatedAt: boolean
+  /**
+   * New posts to attribute to today. Zero on a failure, and zero for the first
+   * successful fetch of a feed — that one seeds a whole feed at once, which is a
+   * backfill rather than a day's posting (see refresh.ts).
+   */
+  newPosts: number
 }
 
 /**
@@ -424,6 +476,12 @@ export function commitRefresh(
     `INSERT INTO fetch_log (source_id, fetch_id, attempt, status, error, http_status, duration_ms, created_at)
      VALUES (@source_id, @fetch_id, @attempt, @status, @error, @http_status, @duration_ms, @created_at)`,
   )
+  // A single atomic statement, unlike the read-then-write upsert this replaces:
+  // two refreshes landing on the same day can't lose an increment between them.
+  const countPosts = db().prepare(
+    `INSERT INTO daily_posts (source_id, day, count) VALUES (?, ?, ?)
+     ON CONFLICT (source_id, day) DO UPDATE SET count = count + excluded.count`,
+  )
 
   const now = Date.now()
   const setsProfile = outcome.profileImageUrl !== undefined
@@ -444,6 +502,9 @@ export function commitRefresh(
          WHEN permanent_error_at IS NULL THEN @now
          ELSE permanent_error_at END,
        last_success_at = CASE WHEN @status = 'success' THEN @now ELSE last_success_at END,
+       first_success_at = CASE
+         WHEN @status = 'success' AND first_success_at IS NULL THEN @now
+         ELSE first_success_at END,
        updated_at = CASE WHEN @bump = 1 THEN @now ELSE updated_at END
        ${setsName ? ', name = @name, description = @description' : ''}
        ${setsProfile ? ', profile_image_url = @profileImageUrl, profile_asset = @profileAsset' : ''}
@@ -477,7 +538,40 @@ export function commitRefresh(
     })
 
     for (const attempt of attempts) logAttempt.run({ ...attempt, created_at: now })
+
+    // Riding the same transaction as the item inserts means the count can never
+    // drift from the rows it counts.
+    if (outcome.newPosts > 0) countPosts.run(sourceId, dayKey(now), outcome.newPosts)
   })()
+}
+
+// --- daily post counts -----------------------------------------------------
+
+/** New posts per source since `fromDay` (inclusive), for the index page. */
+export function postsInWindowBySource(fromDay: string): Map<number, number> {
+  const rows = db()
+    .prepare<[string], { source_id: number; total: number }>(
+      'SELECT source_id, SUM(count) AS total FROM daily_posts WHERE day >= ? GROUP BY source_id',
+    )
+    .all(fromDay)
+  return new Map(rows.map((row) => [row.source_id, row.total]))
+}
+
+/** New posts for one source since `fromDay` (inclusive). */
+export function postsInWindow(sourceId: number, fromDay: string): number {
+  return (
+    db()
+      .prepare<[number, string], { total: number | null }>(
+        'SELECT SUM(count) AS total FROM daily_posts WHERE source_id = ? AND day >= ?',
+      )
+      .get(sourceId, fromDay)?.total ?? 0
+  )
+}
+
+/** Drop day buckets that have fallen out of the retention window. `day` is a
+ * fixed-width YYYY-MM-DD string, so a lexicographic compare is a date compare. */
+export function pruneDailyPostsBefore(fromDay: string): number {
+  return db().prepare('DELETE FROM daily_posts WHERE day < ?').run(fromDay).changes
 }
 
 // --- fetch log -------------------------------------------------------------
