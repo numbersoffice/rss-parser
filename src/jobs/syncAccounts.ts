@@ -6,21 +6,16 @@ import { log } from '../log.js'
 import { parseAccounts } from '../lib/accounts.js'
 import { unlinkAssets } from '../lib/assets.js'
 import { describeError } from '../lib/errors.js'
-import type { JobResult } from './scheduler.js'
 
 const TYPE = 'instagram'
-
-/** Last seen mtime, so an unchanged file costs one stat and no parse or diff. */
-let lastMtimeMs = -1
-
-/** Force the next run to re-read regardless of mtime (boot, SIGHUP). */
-export function invalidateAccountsCache(): void {
-  lastMtimeMs = -1
-}
 
 /**
  * Reconcile the sources table with `accounts.txt`: insert what's new, delete
  * what's gone along with its mirrored images.
+ *
+ * Runs once, at boot. The file is committed to the repo, so adding or removing a
+ * handle triggers a redeploy — and the fresh process reconciles here on the way
+ * up. There is no periodic re-read: nothing changes the file within a run's life.
  *
  * The safety rule here matters more than anything else in the app: if the file
  * is missing, unreadable, or contains no usable handles, change *nothing*.
@@ -28,19 +23,16 @@ export function invalidateAccountsCache(): void {
  * feed and every asset, and that is the one loss in this system that isn't
  * recoverable from a re-fetch.
  */
-export async function syncAccounts(): Promise<JobResult> {
+export async function syncAccounts(): Promise<void> {
   let text: string
   try {
-    const stat = await fs.stat(config.accountsFile)
-    if (stat.mtimeMs === lastMtimeMs) return { skipped: true }
     text = await fs.readFile(config.accountsFile, 'utf8')
-    lastMtimeMs = stat.mtimeMs
   } catch (err) {
     log.error('cannot read the accounts file — leaving all feeds untouched', {
       file: config.accountsFile,
       error: describeError(err),
     })
-    return { status: 'error' }
+    return
   }
 
   const { handles, invalid } = parseAccounts(text)
@@ -51,7 +43,7 @@ export async function syncAccounts(): Promise<JobResult> {
     log.error('accounts file lists no usable handles — leaving all feeds untouched', {
       file: config.accountsFile,
     })
-    return { status: 'error' }
+    return
   }
 
   const existing = listSources()
@@ -77,16 +69,16 @@ export async function syncAccounts(): Promise<JobResult> {
     removed.push(source.handle)
   }
 
+  const feeds = existing.length + added.length - removed.length
   if (added.length === 0 && removed.length === 0) {
-    return { fields: { feeds: existing.length } }
+    log.info('accounts in sync', { feeds })
+    return
   }
-  return {
-    fields: {
-      added: added.length || undefined,
-      removed: removed.length || undefined,
-      handles: [...added.map((h) => `+@${h}`), ...removed.map((h) => `-@${h}`)].join(' '),
-      assets: assetsRemoved || undefined,
-      feeds: existing.length + added.length - removed.length,
-    },
-  }
+  log.info('accounts synced', {
+    added: added.length || undefined,
+    removed: removed.length || undefined,
+    handles: [...added.map((h) => `+@${h}`), ...removed.map((h) => `-@${h}`)].join(' '),
+    assets: assetsRemoved || undefined,
+    feeds,
+  })
 }

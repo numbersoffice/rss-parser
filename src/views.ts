@@ -166,7 +166,7 @@ export function renderIndex(
 
   const body = sources.length
     ? `<ul>\n${items}\n</ul>`
-    : `<div class="empty">No feeds yet. Add an Instagram username to <code>accounts.txt</code>, one per line — it is picked up within a minute.</div>`
+    : `<div class="empty">No feeds yet. Add an Instagram username to <code>accounts.txt</code>, one per line — it is published on the next deploy.</div>`
 
   return layout(
     'Feeds — rss-parser',

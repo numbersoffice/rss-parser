@@ -21,7 +21,7 @@ services:
     volumes:
       # SQLite database + mirrored images.
       - ./data:/app/data
-      # Bind-mounted so the feed list can be edited (and picked up within a
-      # minute) without rebuilding the image. `docker kill -s HUP` forces an
-      # immediate re-read.
+      # Bind-mounted so the feed list can be edited without rebuilding the image.
+      # It is reconciled once at startup, so `docker compose restart` (or a
+      # redeploy) applies an edit.
       - ./accounts.txt:/app/accounts.txt:ro

@@ -16,7 +16,7 @@ import {
 } from './db.js'
 import { type Average, averagePerDay, windowStartDay } from './lib/activity.js'
 import { log } from './log.js'
-import { invalidateAccountsCache, syncAccounts } from './jobs/syncAccounts.js'
+import { syncAccounts } from './jobs/syncAccounts.js'
 import { pruneHistory } from './jobs/pruneHistory.js'
 import { refreshFeeds } from './jobs/refreshFeeds.js'
 import { Scheduler } from './jobs/scheduler.js'
@@ -164,7 +164,6 @@ function lookup(prefix: string | undefined, rawHandle: string | undefined) {
 }
 
 const scheduler = new Scheduler([
-  { name: 'sync-accounts', everyMs: config.tickIntervalMs, run: syncAccounts },
   { name: 'refresh-feeds', everyMs: config.tickIntervalMs, run: refreshFeeds },
   { name: 'prune-history', everyMs: DAY_MS, run: pruneHistory },
   { name: 'sweep-assets', everyMs: DAY_MS, run: sweepAssets },
@@ -172,6 +171,11 @@ const scheduler = new Scheduler([
 
 async function main(): Promise<void> {
   initDb()
+
+  // Reconcile feeds with accounts.txt once, here on the way up. The file is
+  // committed, so a change to it is a redeploy, and this fresh process picks it
+  // up — there is no periodic re-read.
+  await syncAccounts()
 
   // The asset total is kept in memory and adjusted as images are stored and
   // deleted, so it has to be established once against the directory at startup.
@@ -191,12 +195,6 @@ async function main(): Promise<void> {
       accounts: config.accountsFile,
     })
     scheduler.start()
-  })
-
-  // Editing accounts.txt is normally picked up within a minute; SIGHUP forces it.
-  process.on('SIGHUP', () => {
-    log.info('SIGHUP — re-reading the accounts file')
-    invalidateAccountsCache()
   })
 
   let shuttingDown = false
