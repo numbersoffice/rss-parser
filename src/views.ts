@@ -89,6 +89,11 @@ function ago(ms: number | null): string {
   return `${Math.round(hours / 24)}d ago`
 }
 
+/** Cap a string at `max` characters, marking the cut with an ellipsis. */
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
 /** Byte sizes at a glance — powers of 1024, one decimal from MB up. */
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -198,7 +203,7 @@ export function renderLanding(
   const recent = items
     .map(
       (item) =>
-        `  <li><div class="row"><span class="meta mono">${new Date(item.published_at).toISOString().slice(0, 10)}</span> <a href="${escapeHtml(item.url)}">${escapeHtml(item.title)}</a></div></li>`,
+        `  <li><div class="row"><span class="meta mono">${new Date(item.published_at).toISOString().slice(0, 10)}</span> <a href="${escapeHtml(item.url)}" title="${escapeHtml(item.title)}">${escapeHtml(truncate(item.title, 5))}</a></div></li>`,
     )
     .join('\n')
 
