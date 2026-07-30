@@ -85,11 +85,34 @@ export async function storeImage(url: string, baseName: string): Promise<StoredA
     throw new Error(`refusing to write unsafe asset name "${filename}"`)
   }
 
+  const target = assetPath(filename)
+  // A retried mirror can land on a name that already exists (same post, same
+  // content-type). Measure what's being replaced so the running total swaps the
+  // sizes instead of counting the file twice.
+  const replaced = await fileSize(target)
+
   const temp = path.join(tmpDir, randomBytes(12).toString('hex'))
   await fs.writeFile(temp, bytes)
-  await fs.rename(temp, assetPath(filename))
+  await fs.rename(temp, target)
+
+  if (replaced === null) {
+    usage.files++
+    usage.bytes += bytes.byteLength
+  } else {
+    usage.bytes += bytes.byteLength - replaced
+  }
 
   return { filename, url: assetUrl(filename), bytes: bytes.byteLength, mime }
+}
+
+/** Size of a file, or null if it isn't there. */
+async function fileSize(file: string): Promise<number | null> {
+  try {
+    const stat = await fs.stat(file)
+    return stat.isFile() ? stat.size : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -140,9 +163,16 @@ export async function unlinkAssets(filenames: Iterable<string>): Promise<number>
   let removed = 0
   for (const filename of filenames) {
     if (!isSafeAssetName(filename)) continue
+    const file = assetPath(filename)
+    // Measure before removing — afterwards the size is gone with the file.
+    const size = await fileSize(file)
     try {
-      await fs.unlink(assetPath(filename))
+      await fs.unlink(file)
       removed++
+      if (size !== null) {
+        usage.files--
+        usage.bytes -= size
+      }
     } catch (err) {
       if ((err as { code?: string }).code !== 'ENOENT') {
         log.debug('could not unlink asset', { filename, error: describeError(err) })
@@ -158,46 +188,55 @@ export interface AssetUsage {
 }
 
 /**
- * How much disk the mirrored images take.
+ * How much disk the mirrored images take, maintained as a running total.
  *
- * Measured by walking the directory rather than summing the stored
- * `asset_bytes`, because the question is what's actually on disk: profile
- * pictures don't carry a byte count, and orphans waiting for the next sweep are
- * real disk usage even though no row points at them.
+ * Only two things change this directory — a refresh storing an image and a
+ * delete removing one — and both go through this module, so the total is
+ * adjusted at those two points and nowhere else. Reading it never touches the
+ * filesystem, which keeps the index page's cost independent of how many images
+ * are stored.
  *
- * Memoised briefly so repeated page loads don't re-stat every file. The index
- * page is uncached by design, and a few hundred stat calls per view would be a
- * silly amount of work for a number that changes a few times an hour.
+ * It counts what is actually on disk rather than summing the `asset_bytes`
+ * recorded against posts: profile pictures carry no byte count, and orphans
+ * awaiting the next sweep occupy real space even though no row points at them.
  */
-const USAGE_TTL_MS = 60_000
-let usageCache: { at: number; usage: AssetUsage } | undefined
+const usage: AssetUsage = { files: 0, bytes: 0 }
 
-export async function assetUsage(): Promise<AssetUsage> {
-  if (usageCache && Date.now() - usageCache.at < USAGE_TTL_MS) return usageCache.usage
+/** The current total. Synchronous — it is already in memory. */
+export function assetUsage(): AssetUsage {
+  return { ...usage }
+}
 
-  const usage: AssetUsage = { files: 0, bytes: 0 }
+/**
+ * Walk the directory and reset the running total to the truth.
+ *
+ * Called once at boot, since the total lives in memory and starts at zero, and
+ * again from the daily sweep — which is the backstop for any drift, e.g. a file
+ * removed out from under us or an unlink that failed after its size was already
+ * deducted. Between those, the incremental adjustments carry it.
+ */
+export async function recomputeAssetUsage(): Promise<AssetUsage> {
+  let files = 0
+  let bytes = 0
   try {
     for (const entry of await fs.readdir(assetsDir, { withFileTypes: true })) {
+      // Nothing here creates subdirectories — names are sanitised so they can't
+      // contain a separator — but this is a mounted volume, and adding a
+      // directory's own size to an image total would just be wrong.
       if (!entry.isFile()) continue
-      try {
-        const stat = await fs.stat(path.join(assetsDir, entry.name))
-        usage.files++
-        usage.bytes += stat.size
-      } catch {
-        // Swept between the readdir and the stat — just don't count it.
-      }
+      const size = await fileSize(path.join(assetsDir, entry.name))
+      if (size === null) continue // swept between the readdir and the stat
+      files++
+      bytes += size
     }
   } catch (err) {
     log.warn('could not measure asset usage', { error: describeError(err) })
+    return { ...usage }
   }
 
-  usageCache = { at: Date.now(), usage }
-  return usage
-}
-
-/** Drop the memo after something is known to have changed it. */
-export function invalidateAssetUsage(): void {
-  usageCache = undefined
+  usage.files = files
+  usage.bytes = bytes
+  return { ...usage }
 }
 
 /** Leftover temp files from a crashed download. */

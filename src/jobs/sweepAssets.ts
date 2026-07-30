@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import { assetsDir, config } from '../config.js'
 import { referencedAssets } from '../db.js'
 import { log } from '../log.js'
-import { assetPath, clearTmp, invalidateAssetUsage } from '../lib/assets.js'
+import { assetPath, clearTmp, recomputeAssetUsage } from '../lib/assets.js'
 import { describeError } from '../lib/errors.js'
 import type { JobResult } from './scheduler.js'
 
@@ -52,7 +52,14 @@ export async function sweepAssets(): Promise<JobResult> {
     }
   }
 
+  // This job deletes files directly rather than through unlinkAssets, and it is
+  // the one place that already knows the whole directory — so resync the running
+  // total here. That also makes the daily sweep the backstop for any drift the
+  // incremental adjustments picked up.
+  const usage = await recomputeAssetUsage()
+
   if (removed === 0) return { skipped: true }
-  invalidateAssetUsage()
-  return { fields: { removed, kb: Math.round(bytes / 1024) } }
+  return {
+    fields: { removed, kb: Math.round(bytes / 1024), totalKb: Math.round(usage.bytes / 1024) },
+  }
 }

@@ -120,11 +120,18 @@ signed URLs to any IP, while the profile API is the part that actually needs a
 residential exit. Set `imageFetch` in `src/config.ts` to `'proxy'` or `'direct'`
 to override.
 
-The index page footer shows what `data/assets/` currently occupies. It's
-measured by walking the directory rather than adding up stored sizes, so it
-reflects real disk usage — including profile pictures and any orphans still
-waiting for the next sweep — and it's memoised for a minute so viewing the page
-doesn't re-stat every file.
+The index page footer shows what `data/assets/` currently occupies. It's a
+running total, adjusted at the only two moments the directory changes — an image
+being stored and an image being deleted — so reading it never touches the
+filesystem and the page's cost doesn't grow with the number of images. It's
+established against the directory once at startup, and the daily sweep re-walks
+it as a backstop against drift.
+
+It counts what is really on disk rather than adding up the byte counts stored
+against posts, so profile pictures and any orphans awaiting the next sweep are
+included. Note that it sums apparent file sizes, so `du -sh data/assets` will
+report slightly more (each file rounds up to a filesystem block), and it covers
+only the images — not the SQLite database alongside them.
 
 ### Posts per day
 

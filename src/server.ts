@@ -21,7 +21,7 @@ import { pruneHistory } from './jobs/pruneHistory.js'
 import { refreshFeeds } from './jobs/refreshFeeds.js'
 import { Scheduler } from './jobs/scheduler.js'
 import { sweepAssets } from './jobs/sweepAssets.js'
-import { assetUsage } from './lib/assets.js'
+import { assetUsage, recomputeAssetUsage } from './lib/assets.js'
 import { describeError } from './lib/errors.js'
 import { proxyEndpoint } from './lib/proxy.js'
 import { buildRssXml } from './lib/rss.js'
@@ -50,7 +50,7 @@ app.get('/healthz', (_req, res) => {
   })
 })
 
-app.get('/', async (_req, res) => {
+app.get('/', (_req, res) => {
   const sources = listSources()
   const posts = postsInWindowBySource(windowStartDay(config.activityWindowDays))
   const averages = new Map<number, Average | null>(
@@ -59,9 +59,8 @@ app.get('/', async (_req, res) => {
       averagePerDay(posts.get(source.id) ?? 0, source.first_success_at, config.activityWindowDays),
     ]),
   )
-  const usage = await assetUsage()
   res.set('cache-control', 'no-store')
-  res.type('html').send(renderIndex(sources, countItemsBySource(), averages, usage))
+  res.type('html').send(renderIndex(sources, countItemsBySource(), averages, assetUsage()))
 })
 
 /**
@@ -171,14 +170,19 @@ const scheduler = new Scheduler([
   { name: 'sweep-assets', everyMs: DAY_MS, run: sweepAssets },
 ])
 
-function main(): void {
+async function main(): Promise<void> {
   initDb()
+
+  // The asset total is kept in memory and adjusted as images are stored and
+  // deleted, so it has to be established once against the directory at startup.
+  const usage = await recomputeAssetUsage()
 
   const server = app.listen(config.port, () => {
     log.info('rss-parser listening', {
       port: config.port,
       url: config.publicBaseUrl,
       feeds: listSources().length,
+      assets: `${usage.files} files, ${Math.round(usage.bytes / 1024)} KB`,
       // Never the proxy URL itself — it carries credentials.
       proxy: proxyEndpoint() ?? 'direct',
       images: config.mirrorImages ? config.imageFetch : 'off',
@@ -219,4 +223,4 @@ function main(): void {
   })
 }
 
-main()
+void main()
