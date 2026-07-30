@@ -48,6 +48,11 @@ const STYLES = `
     display: block; overflow-x: auto; white-space: nowrap; font-size: 13px;
   }
   .meta { color: var(--muted); font-size: 13px; }
+  .post { display: flex; align-items: baseline; gap: .55rem; }
+  .post .meta { flex: none; }
+  .post .title {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .badge { font-size: 12px; }
   .badge::before { content: "["; }
   .badge::after { content: "]"; }
@@ -87,11 +92,6 @@ function ago(ms: number | null): string {
   const hours = Math.round(minutes / 60)
   if (hours < 24) return `${hours}h ago`
   return `${Math.round(hours / 24)}d ago`
-}
-
-/** Cap a string at `max` characters, marking the cut with an ellipsis. */
-function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text
 }
 
 /** Byte sizes at a glance — powers of 1024, one decimal from MB up. */
@@ -203,7 +203,7 @@ export function renderLanding(
   const recent = items
     .map(
       (item) =>
-        `  <li><div class="row"><span class="meta mono">${new Date(item.published_at).toISOString().slice(0, 10)}</span> <a href="${escapeHtml(item.url)}" title="${escapeHtml(item.title)}">${escapeHtml(truncate(item.title, 50))}</a></div></li>`,
+        `  <li class="post"><span class="meta mono">${new Date(item.published_at).toISOString().slice(0, 10)}</span> <a class="title" href="${escapeHtml(item.url)}" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</a></li>`,
     )
     .join('\n')
 
