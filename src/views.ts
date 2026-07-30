@@ -14,14 +14,13 @@ import { feedUrlFor, landingUrl, sourceLink } from './lib/rss.js'
 /*
  * Deliberately low-fi, as the pre-rewrite landing page was: one system monospace
  * stack, no webfonts, no external requests. Black on white paper, default browser
- * link blue as the only accent, dashed hairlines instead of cards, and a hard
- * offset shadow on framed elements.
+ * link blue as the only accent. Rows are separated by whitespace alone — no rules,
+ * borders, or boxes.
  */
 const STYLES = `
   :root {
-    --bg: #ffffff; --fg: #000000; --muted: #8a8a8a; --line: #cccccc;
+    --bg: #ffffff; --fg: #000000; --muted: #8a8a8a; --line: #eeeeee;
     --accent: #0000ee; --visited: #551a8b; --bad: #cc0000;
-    --hairline: 1px dashed var(--line);
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   }
   * { box-sizing: border-box; }
@@ -38,22 +37,15 @@ const STYLES = `
   a:visited { color: var(--visited); }
   a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   ul { list-style: none; margin: 1.25rem 0; padding: 0; }
-  li {
-    padding: .75rem 0; display: grid; gap: .45rem;
-    border-bottom: var(--hairline);
-  }
-  li:first-child { border-top: var(--hairline); }
+  li { padding: .9rem 0; display: grid; gap: .45rem; }
   .row { display: flex; flex-wrap: wrap; align-items: baseline; gap: .55rem; }
   .handle { font-weight: 700; }
   .avatar {
     width: 34px; height: 34px; object-fit: cover; align-self: center;
-    border: 1px solid var(--fg); box-shadow: 2px 2px 0 var(--accent);
-    background: var(--bg); flex: none;
+    background: var(--line); flex: none;
   }
   .feed {
     display: block; overflow-x: auto; white-space: nowrap; font-size: 13px;
-    border: 1px solid var(--fg); box-shadow: 2px 2px 0 var(--accent);
-    padding: .4rem .6rem;
   }
   .meta { color: var(--muted); font-size: 13px; }
   .badge { font-size: 12px; }
@@ -64,11 +56,8 @@ const STYLES = `
   .badge.wait { color: var(--muted); }
   .rate { font-size: 12px; color: var(--muted); cursor: help; }
   .err { color: var(--bad); font-size: 13px; word-break: break-word; }
-  footer {
-    margin-top: 3.5rem; padding-top: .75rem; border-top: var(--hairline);
-    color: var(--muted); font-size: 13px;
-  }
-  .empty { border: var(--hairline); padding: 1.5rem; }
+  footer { margin-top: 3.5rem; color: var(--muted); font-size: 13px; }
+  .empty { padding: 1.5rem 0; }
 `
 
 const layout = (title: string, head: string, body: string): string =>
