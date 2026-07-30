@@ -1,0 +1,27 @@
+services:
+  rss-parser:
+    build: .
+    restart: unless-stopped
+    # We spawn no children, so all that's needed is correct signal delivery to
+    # PID 1 — the app's own SIGTERM handler does the rest.
+    init: true
+    # Long enough for an in-flight refresh to be abandoned cleanly instead of
+    # being SIGKILLed mid-transaction.
+    stop_grace_period: 20s
+    mem_limit: 256m
+    ports:
+      - '3000:3000'
+    environment:
+      # The origin readers will use. Feed URLs and the image URLs inside feed
+      # items are built from this, so it has to be the public one.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      # Optional residential proxy; see .env.example.
+      OUTBOUND_PROXY_URL: ${OUTBOUND_PROXY_URL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      # SQLite database + mirrored images.
+      - ./data:/app/data
+      # Bind-mounted so the feed list can be edited (and picked up within a
+      # minute) without rebuilding the image. `docker kill -s HUP` forces an
+      # immediate re-read.
+      - ./accounts.txt:/app/accounts.txt:ro

@@ -1,56 +1,37 @@
 {
   "name": "rss-parser",
-  "version": "1.0.0",
-  "description": "Turn Instagram feeds (and more) into RSS feeds, powered by Payload CMS",
+  "version": "2.0.0",
+  "description": "Turn public Instagram accounts into RSS feeds. Minimal Express + SQLite.",
   "license": "MIT",
   "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": "^9 || ^10"
+  },
   "scripts": {
-    "build": "cross-env NODE_OPTIONS=\"--no-deprecation --max-old-space-size=4000\" next build",
-    "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev",
-    "devsafe": "rm -rf .next && cross-env NODE_OPTIONS=--no-deprecation next dev",
-    "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap",
-    "generate:types": "cross-env NODE_OPTIONS=--no-deprecation payload generate:types",
-    "lint": "cross-env NODE_OPTIONS=--no-deprecation eslint .",
-    "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
-    "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
-    "update:disposable-domains": "node scripts/update-disposable-domains.mjs"
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsc && node --watch dist/server.js",
+    "watch": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node --test dist/**/*.test.js",
+    "format": "prettier --write ."
   },
   "dependencies": {
-    "@payloadcms/db-sqlite": "3.85.2",
-    "@payloadcms/email-nodemailer": "3.85.2",
-    "@payloadcms/next": "3.85.2",
-    "@payloadcms/richtext-lexical": "3.85.2",
-    "@payloadcms/storage-s3": "3.85.2",
-    "@payloadcms/ui": "3.85.2",
-    "cross-env": "^7.0.3",
-    "dotenv": "16.4.7",
-    "graphql": "^16.8.1",
-    "next": "16.2.6",
-    "payload": "3.85.2",
-    "react": "19.2.6",
-    "react-dom": "19.2.6",
+    "better-sqlite3": "^13.0.2",
+    "express": "^5.2.1",
     "undici": "^8.6.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
     "@types/node": "22.19.9",
-    "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3",
-    "eslint": "^9.16.0",
-    "eslint-config-next": "16.2.6",
     "prettier": "^3.4.2",
     "typescript": "5.7.3"
   },
-  "engines": {
-    "node": "^18.20.2 || >=20.9.0",
-    "pnpm": "^9 || ^10"
-  },
   "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "unrs-resolver"
-    ],
-    "overrides": {
-      "@libsql/client": "^0.17.4"
-    }
+    "//": "better-sqlite3 v13 ships its native binding as bundled N-API prebuilds (incl. linuxmusl), so its node-gyp script is dead weight — skipping it keeps installs fast and needs no build toolchain in the image.",
+    "ignoredBuiltDependencies": ["better-sqlite3"]
   }
 }

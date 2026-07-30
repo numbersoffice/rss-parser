@@ -1,0 +1,11 @@
+# The feeds this instance publishes — one Instagram username per line.
+#
+# Add a line and commit to create a feed. Remove a line and commit to delete the
+# feed and every image it had mirrored. Changes are picked up within a minute; no
+# restart needed.
+#
+# Blank lines and "#" comments are ignored. A leading "@" is optional and
+# usernames are matched case-insensitively.
+
+nasa
+natgeo

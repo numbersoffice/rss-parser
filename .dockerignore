@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+.git
+.gitignore
+.env
+.env.*
+.vscode
+*.log
+*.tsbuildinfo
+README.md

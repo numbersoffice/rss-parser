@@ -1,7 +1,13 @@
-import type { AttemptRecord, NormalizedFeed, NormalizedItem, SourceAdapter } from './types'
-import type { Source } from '@/payload-types'
-import { escapeHtml } from '@/lib/html'
-import { outboundFetch, proxyEndpoint, randomSessionId, sessionForSource } from '@/lib/proxy'
+import type {
+  AdapterSource,
+  AttemptRecord,
+  NormalizedFeed,
+  NormalizedItem,
+  SourceAdapter,
+} from './types.js'
+import { PermanentFetchError, RetryableFetchError } from './types.js'
+import { escapeHtml } from '../lib/html.js'
+import { outboundFetch, proxyEndpoint, randomSessionId, sessionForSource } from '../lib/proxy.js'
 
 /**
  * Fetches public Instagram profiles via Instagram's own web API — the same
@@ -14,9 +20,8 @@ import { outboundFetch, proxyEndpoint, randomSessionId, sessionForSource } from 
  * session id, so — when a session-capable proxy is configured — they leave from
  * the same IP, which is what the cookie handshake expects.
  *
- * Still unofficial: Instagram may rate-limit or block. Errors surface on the
- * Source document in the admin dashboard, and previously cached items keep
- * serving.
+ * Still unofficial: Instagram may rate-limit or block. Errors are logged and
+ * recorded on the source, and previously cached items keep serving.
  */
 
 // Public app id of the instagram.com web client — required by the endpoint.
@@ -29,7 +34,7 @@ const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 
 // Client-hint headers must agree with USER_AGENT (Chrome 126 on macOS) — a UA
-// with no/​mismatched hints is itself a bot tell.
+// with no/mismatched hints is itself a bot tell.
 const SEC_CH_UA = '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"'
 const CLIENT_HINTS = {
   'sec-ch-ua': SEC_CH_UA,
@@ -37,11 +42,18 @@ const CLIENT_HINTS = {
   'sec-ch-ua-platform': '"macOS"',
 }
 
+/** Pause between retry attempts, each of which rotates the proxy exit IP. */
+const RETRY_DELAY_MS = 2_000
+
+/** Strip a leading "@" and surrounding whitespace from a handle. */
+export const normalizeHandle = (handle: string): string =>
+  handle.trim().replace(/^@/, '').toLowerCase()
+
 /** Parse `Set-Cookie` lines into a name→value jar (first name=value of each). */
 function parseSetCookies(lines: string[]): Record<string, string> {
   const jar: Record<string, string> = {}
   for (const line of lines) {
-    const pair = line.split(';', 1)[0]
+    const pair = line.split(';', 1)[0] ?? ''
     const eq = pair.indexOf('=')
     if (eq > 0) {
       const name = pair.slice(0, eq).trim()
@@ -109,12 +121,14 @@ interface IgTimelineMedia {
 }
 
 function firstLine(text: string, maxLength = 120): string {
-  const line = text.split('\n')[0].trim()
+  const line = (text.split('\n')[0] ?? '').trim()
   return line.length > maxLength ? `${line.slice(0, maxLength - 1)}…` : line
 }
 
 /** The per-attempt HTTP metadata fetchProfile leaves on `debug`. */
-function attemptMeta(debug: Record<string, unknown>): Pick<AttemptRecord, 'httpStatus' | 'durationMs'> {
+function attemptMeta(
+  debug: Record<string, unknown>,
+): Pick<AttemptRecord, 'httpStatus' | 'durationMs'> {
   return {
     httpStatus: typeof debug.httpStatus === 'number' ? debug.httpStatus : null,
     durationMs: typeof debug.durationMs === 'number' ? debug.durationMs : null,
@@ -137,7 +151,9 @@ function toItem(media: IgTimelineMedia, username: string): NormalizedItem {
 
   const parts: string[] = []
   if (media.display_url) {
-    parts.push(`<p><a href="${escapeHtml(url)}"><img src="${escapeHtml(media.display_url)}" alt="" /></a></p>`)
+    parts.push(
+      `<p><a href="${escapeHtml(url)}"><img src="${escapeHtml(media.display_url)}" alt="" /></a></p>`,
+    )
   }
   if (caption) {
     parts.push(`<p>${escapeHtml(caption).replaceAll('\n', '<br />')}</p>`)
@@ -152,11 +168,6 @@ function toItem(media: IgTimelineMedia, username: string): NormalizedItem {
     publishedAt: new Date(media.taken_at_timestamp * 1000),
   }
 }
-
-/** A fetch failure that retrying on a fresh proxy IP might recover — IP-level
- * blocks (401/403/429) or a login-wall HTML response. Distinct from permanent
- * errors like a missing or private profile, which no retry can fix. */
-class RetryableFetchError extends Error {}
 
 /**
  * One attempt at fetching a profile on a given sticky proxy session: prime a
@@ -220,7 +231,7 @@ async function fetchProfile(
   ])
 
   if (res.status === 404) {
-    throw new Error(`Instagram profile @${username} not found`)
+    throw new PermanentFetchError(`Instagram profile @${username} not found`, 'notfound')
   }
   if (!res.ok) {
     // 401/403/429/5xx — usually a burned exit IP; a retry on a new IP recovers.
@@ -240,6 +251,8 @@ async function fetchProfile(
     data?: {
       user?: {
         is_private?: boolean
+        full_name?: string
+        biography?: string
         profile_pic_url?: string
         profile_pic_url_hd?: string
         edge_owner_to_timeline_media?: { edges?: Array<{ node: IgTimelineMedia }> }
@@ -249,33 +262,45 @@ async function fetchProfile(
 
   const user = body.data?.user
   if (!user) {
-    throw new Error(`Instagram profile @${username} not found`)
+    throw new PermanentFetchError(`Instagram profile @${username} not found`, 'notfound')
   }
   if (user.is_private) {
-    throw new Error(`Instagram profile @${username} is private — only public profiles can be converted`)
+    throw new PermanentFetchError(
+      `Instagram profile @${username} is private — only public profiles can be converted`,
+      'private',
+    )
   }
 
   // Prefer the HD avatar; both are signed CDN URLs the refresh layer mirrors.
   const profileImageUrl = user.profile_pic_url_hd ?? user.profile_pic_url
   debug.hasProfileImage = Boolean(profileImageUrl)
 
+  // The endpoint already returns these, so the feed's channel title and
+  // description can name the account properly instead of echoing the handle.
+  const fullName = user.full_name?.trim()
+  const biography = user.biography?.trim()
+
   const edges = user.edge_owner_to_timeline_media?.edges ?? []
   debug.itemCount = edges.length
   return {
     items: edges.map(({ node }) => toItem(node, username)),
-    profile: profileImageUrl ? { imageUrl: profileImageUrl } : undefined,
+    profile: {
+      imageUrl: profileImageUrl,
+      title: fullName ? `${fullName} (@${username})` : `@${username}`,
+      description: biography || `Instagram posts by @${username}`,
+    },
   }
 }
 
 export const instagramAdapter: SourceAdapter = {
   type: 'instagram',
 
-  sourceUrl(source: Source): string {
-    return `https://www.instagram.com/${(source.handle ?? '').trim().replace(/^@/, '')}/`
+  sourceUrl(source: AdapterSource): string {
+    return `https://www.instagram.com/${normalizeHandle(source.handle ?? '')}/`
   },
 
   async fetchItems(
-    source: Source,
+    source: AdapterSource,
     debug: Record<string, unknown> = {},
     maxAttempts = 1,
   ): Promise<NormalizedFeed> {
@@ -283,9 +308,9 @@ export const instagramAdapter: SourceAdapter = {
     debug.proxied = proxy !== null
     debug.proxy = proxy ?? 'direct'
 
-    const username = source.handle?.trim().replace(/^@/, '')
+    const username = normalizeHandle(source.handle ?? '')
     if (!username) {
-      throw new Error('Source has no Instagram handle configured')
+      throw new PermanentFetchError('Source has no Instagram handle configured', 'handle')
     }
 
     const endpoint = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`
@@ -299,7 +324,7 @@ export const instagramAdapter: SourceAdapter = {
     // fresh random session (a no-op when the proxy isn't session-aware).
     const attempts = Math.max(1, maxAttempts)
     // One record per attempt, surfaced so the refresh layer can log each try as
-    // its own request (retries count as regular requests in the health trend).
+    // its own request (retries count as regular requests in the fetch log).
     const attemptLog: AttemptRecord[] = []
     debug.attempts = attemptLog
     let lastError: unknown
@@ -308,7 +333,7 @@ export const instagramAdapter: SourceAdapter = {
       // record if this attempt fails before the profile request runs.
       debug.httpStatus = null
       debug.durationMs = null
-      const session = attempt === 1 ? sessionForSource(source.id) : randomSessionId()
+      const session = attempt === 1 ? sessionForSource(source) : randomSessionId()
       try {
         const feed = await fetchProfile(username, endpoint, session, debug)
         attemptLog.push({ status: 'success', ...attemptMeta(debug), error: null })
@@ -320,7 +345,12 @@ export const instagramAdapter: SourceAdapter = {
           error: err instanceof Error ? err.message : String(err),
         })
         lastError = err
-        if (err instanceof RetryableFetchError && attempt < attempts) continue
+        if (err instanceof RetryableFetchError && attempt < attempts) {
+          // Brief pause before rotating to a new exit IP. Hammering the proxy
+          // pool three times inside a second is the least useful form of retry.
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
+          continue
+        }
         throw err
       }
     }

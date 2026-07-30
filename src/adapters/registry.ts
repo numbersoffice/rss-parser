@@ -1,5 +1,5 @@
-import { instagramAdapter } from './instagram'
-import type { SourceAdapter } from './types'
+import { instagramAdapter } from './instagram.js'
+import type { SourceAdapter } from './types.js'
 
 const adapters: Record<string, SourceAdapter> = {
   [instagramAdapter.type]: instagramAdapter,
@@ -15,8 +15,16 @@ export function getAdapter(type: string): SourceAdapter {
   return adapter
 }
 
-/** Options for the `type` select field on the Sources collection. */
-export const sourceTypeOptions = Object.keys(adapters).map((type) => ({
-  label: type.charAt(0).toUpperCase() + type.slice(1),
-  value: type,
-}))
+/**
+ * The short URL segment a source type is published under, e.g. `instagram` →
+ * `/feeds/ig/{handle}.xml`. Keeping the mapping here means adding an adapter
+ * doesn't touch the routing code.
+ */
+export const FEED_PREFIXES: Record<string, string> = {
+  instagram: 'ig',
+}
+
+export const typeForPrefix = (prefix: string): string | undefined =>
+  Object.entries(FEED_PREFIXES).find(([, value]) => value === prefix)?.[0]
+
+export const prefixForType = (type: string): string => FEED_PREFIXES[type] ?? type

@@ -1,9 +1,10 @@
+import { createHash, randomBytes } from 'node:crypto'
 import { fetch as undiciFetch, ProxyAgent } from 'undici'
 
 /**
- * fetch for outbound adapter traffic (e.g. Instagram). When OUTBOUND_PROXY_URL
- * is set, requests are tunneled through that HTTP proxy — e.g. a residential
- * proxy so Instagram doesn't see a datacenter IP:
+ * fetch for outbound adapter traffic (Instagram profile fetches and image
+ * downloads). When OUTBOUND_PROXY_URL is set, requests are tunneled through that
+ * HTTP proxy — e.g. a residential proxy so Instagram doesn't see a datacenter IP:
  *
  *   OUTBOUND_PROXY_URL=http://user-USER-country-us-session-{session}:PASS@gate.decodo.com:7000
  *
@@ -17,22 +18,39 @@ import { fetch as undiciFetch, ProxyAgent } from 'undici'
  * session id is ignored and traffic rotates as before.
  *
  * Node's built-in fetch ignores HTTP_PROXY/HTTPS_PROXY, so this goes through
- * undici's ProxyAgent instead. Only adapters should use this; app-internal
+ * undici's ProxyAgent instead. Only adapters should use this; the app's own
  * requests must not consume metered proxy bandwidth.
  */
 
 const SESSION_PLACEHOLDER = '{session}'
 
-// One dispatcher per resolved proxy URL. Distinct session ids resolve to
-// distinct URLs and thus distinct agents/IPs; requests sharing an id reuse the
-// same agent (and connection pool), so a prime+fetch pair stays on one IP.
+/**
+ * One dispatcher per resolved proxy URL. Distinct session ids resolve to
+ * distinct URLs and thus distinct agents/IPs; requests sharing an id reuse the
+ * same agent (and connection pool), so a prime+fetch pair stays on one IP.
+ *
+ * Bounded, because retries mint a fresh random session id every time: without a
+ * cap this map — and the sockets its agents hold — would grow for the lifetime
+ * of the process. Insertion-ordered, so evicting the first key drops the
+ * least-recently-created agent.
+ */
+const MAX_DISPATCHERS = 64
 const dispatchers = new Map<string, ProxyAgent>()
 
 function dispatcherFor(proxyUrl: string): ProxyAgent {
-  let agent = dispatchers.get(proxyUrl)
-  if (!agent) {
-    agent = new ProxyAgent(proxyUrl)
-    dispatchers.set(proxyUrl, agent)
+  const cached = dispatchers.get(proxyUrl)
+  if (cached) return cached
+
+  const agent = new ProxyAgent(proxyUrl)
+  dispatchers.set(proxyUrl, agent)
+  while (dispatchers.size > MAX_DISPATCHERS) {
+    const oldest = dispatchers.keys().next()
+    if (oldest.done) break
+    const evicted = dispatchers.get(oldest.value)
+    dispatchers.delete(oldest.value)
+    // Close in the background: in-flight requests on the evicted agent finish,
+    // and a failure here must not fail the request that triggered the eviction.
+    void evicted?.close().catch(() => {})
   }
   return agent
 }
@@ -67,7 +85,7 @@ export const outboundFetch = async (
 
 /** A random sticky-session id — hex, provider-neutral, safe in a proxy URL. */
 export function randomSessionId(): string {
-  return Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 10)
+  return randomBytes(8).toString('hex')
 }
 
 /**
@@ -75,13 +93,18 @@ export function randomSessionId(): string {
  * from the same proxy session/IP and two sources refreshed at once never share
  * one (which is what triggers Instagram's per-IP 401s). Alphanumeric, so it's
  * safe inside the proxy username where Decodo carries the session token.
+ *
+ * Derived from type+handle rather than the row id: ids are reassigned when an
+ * account is removed and re-added, and renumbered entirely if the database is
+ * rebuilt, either of which would silently rotate an account's exit IP.
  */
-export function sessionForSource(id: string | number): string {
-  return `src${id}`
+export function sessionForSource(source: { type: string; handle: string }): string {
+  const digest = createHash('sha1').update(`${source.type}:${source.handle}`).digest('hex')
+  return `s${digest.slice(0, 12)}`
 }
 
 /** The proxy host:port currently in use, with any credentials and the session
- * placeholder stripped, or null when running direct. Safe to store/display —
+ * placeholder stripped, or null when running direct. Safe to log/display —
  * never exposes the username or password embedded in OUTBOUND_PROXY_URL. */
 export function proxyEndpoint(): string | null {
   const proxyUrl = process.env.OUTBOUND_PROXY_URL

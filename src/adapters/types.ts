@@ -1,5 +1,3 @@
-import type { Source } from '@/payload-types'
-
 /**
  * A feed item in the shape the RSS layer understands, regardless of
  * which platform it came from.
@@ -13,7 +11,7 @@ export interface NormalizedItem {
   /** Permalink to the original post. */
   url: string
   /** The platform's own image URL (may be signed/expiring); the refresh
-   * logic mirrors it into our bucket when S3 storage is configured. */
+   * logic mirrors it into our own asset directory. */
   imageUrl?: string
   publishedAt: Date
 }
@@ -24,8 +22,12 @@ export interface NormalizedItem {
  */
 export interface NormalizedProfile {
   /** The platform's own profile-picture URL (may be signed/expiring); the
-   * refresh logic mirrors it into our bucket like it does post images. */
+   * refresh logic mirrors it locally like it does post images. */
   imageUrl?: string
+  /** Display name for the RSS channel title, e.g. "NASA (@nasa)". */
+  title?: string
+  /** Account bio, used as the RSS channel description. */
+  description?: string
 }
 
 /**
@@ -41,7 +43,7 @@ export interface NormalizedFeed {
 /**
  * The outcome of a single fetch attempt. An adapter that retries surfaces one
  * of these per try (on `debug.attempts`) so the refresh layer can record each
- * attempt as its own request log — retries then count as regular requests.
+ * attempt as its own fetch-log row — retries then count as regular requests.
  */
 export interface AttemptRecord {
   status: 'success' | 'error'
@@ -51,13 +53,50 @@ export interface AttemptRecord {
 }
 
 /**
+ * All an adapter needs to know about an account. Deliberately narrower than the
+ * database row, so adapters stay independent of the persistence layer.
+ */
+export interface AdapterSource {
+  id: number
+  type: string
+  handle: string
+}
+
+/**
+ * A fetch failure that retrying might recover — an IP-level block (401/403/429),
+ * a 5xx, or a login-wall response. The adapter retries these itself on a fresh
+ * proxy exit IP; if every attempt fails the refresh layer schedules a short
+ * backoff, since the account itself is presumably fine.
+ */
+export class RetryableFetchError extends Error {}
+
+/**
+ * A fetch failure no retry can fix: the account doesn't exist, is private, or
+ * the handle is unusable. The adapter gives up immediately and the refresh layer
+ * backs off to once a day — never permanently, because accounts come back from
+ * private and renames, and Meta occasionally 404s a live profile.
+ *
+ * These live here rather than inside the adapter so the refresh layer can tell
+ * the two cases apart with `instanceof` and pick the right backoff.
+ */
+export class PermanentFetchError extends Error {
+  /** Short machine-readable reason, used as the guid of the in-feed notice. */
+  constructor(
+    message: string,
+    readonly kind: 'notfound' | 'private' | 'handle',
+  ) {
+    super(message)
+  }
+}
+
+/**
  * The extension point of the platform. To support a new source type:
  *
  *   1. Create `src/adapters/<type>.ts` implementing this interface.
  *   2. Register it in `src/adapters/registry.ts`.
  *
- * The admin `type` select, caching, refresh, and RSS rendering pick it up
- * automatically.
+ * Fetching, caching, image mirroring and RSS rendering then pick it up
+ * automatically; only the feed route's URL prefix needs a line.
  */
 export interface SourceAdapter {
   type: string
@@ -65,14 +104,14 @@ export interface SourceAdapter {
    * metadata (the profile picture). Throw on failure — the caller records the
    * error on the source and keeps serving cached items. Record
    * request/response metadata (status, timing, headers) into `debug` as it
-   * becomes available — it is stored on the source for troubleshooting even
-   * when the fetch throws. `maxAttempts` (default 1) bounds retries for
-   * transient, IP-level blocks; each retry should rotate the proxy exit IP. */
+   * becomes available — it is logged even when the fetch throws. `maxAttempts`
+   * (default 1) bounds retries for transient, IP-level blocks; each retry
+   * should rotate the proxy exit IP. */
   fetchItems(
-    source: Source,
+    source: AdapterSource,
     debug?: Record<string, unknown>,
     maxAttempts?: number,
   ): Promise<NormalizedFeed>
-  /** Link to the account/page on the source platform, used as the RSS channel link. */
-  sourceUrl?(source: Source): string
+  /** Link to the account/page on the source platform. */
+  sourceUrl?(source: AdapterSource): string
 }

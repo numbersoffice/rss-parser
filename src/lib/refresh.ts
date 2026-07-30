@@ -1,356 +1,379 @@
-import type { Payload } from 'payload'
+import { randomUUID } from 'node:crypto'
 
-import { getAdapter } from '@/adapters/registry'
-import type { AttemptRecord, NormalizedItem } from '@/adapters/types'
-import { escapeHtml } from '@/lib/html'
-import { getMaxFetchAttempts, getMaxItemsPerFeed } from '@/lib/limits'
-import { outboundFetch } from '@/lib/proxy'
-import { relationId } from '@/lib/relations'
-import { isPublicS3Url, publicS3Url, s3Enabled } from '@/lib/s3'
-import type { FeedItem, Source } from '@/payload-types'
+import { getAdapter } from '../adapters/registry.js'
+import type { AttemptRecord, NormalizedFeed, NormalizedItem } from '../adapters/types.js'
+import { PermanentFetchError } from '../adapters/types.js'
+import { assetUrl, config } from '../config.js'
+import {
+  commitRefresh,
+  type FetchLogEntry,
+  type ItemData,
+  type ItemRow,
+  type SourceOutcome,
+  type SourceRow,
+  getSource,
+  listItems,
+} from '../db.js'
+import { log } from '../log.js'
+import { postAssetName, profileAssetName, storeImage, unlinkAssets } from './assets.js'
+import { describeError } from './errors.js'
+import { escapeHtml } from './html.js'
+import { planReconcile } from './plan.js'
 
+/** What one refresh did, for the caller's log line. */
 export interface RefreshResult {
   status: 'success' | 'error'
-  itemCount?: number
-  changes?: ItemChanges
-  error?: string
-  debug?: Record<string, unknown>
-}
-
-/** What a reconciliation ({@link storeItems}) did to the stored feed-items. */
-export interface ItemChanges {
+  itemCount: number
   created: number
   updated: number
   deleted: number
+  mirrored: number
+  httpStatus: number | null
+  durationMs: number | null
+  error?: string
 }
 
 /**
- * Fetch the latest items for a source via its adapter and upsert them into
- * feed-items. Records the outcome on the source document so it is visible
- * in the admin dashboard. Never throws — on failure the cached items remain.
+ * Fetch an account's latest posts, mirror their images, and reconcile them into
+ * the database. Never throws: on failure the previously cached items keep
+ * serving and the error is recorded on the source.
+ *
+ * The ordering below is deliberate and load-bearing:
+ *
+ *   1. fetch (network)         — may throw, handled
+ *   2. read existing rows      — cheap, synchronous
+ *   3. plan the diff           — pure, in memory
+ *   4. mirror images (network) — every await happens here
+ *   5. commit                  — one synchronous transaction, no awaits
+ *   6. unlink dropped files    — after the commit, best-effort
+ *
+ * Steps 4 and 5 must not interleave, and better-sqlite3 enforces it: a
+ * transaction body that returns a promise is rejected outright. Step 6 comes
+ * after the commit so a crash between them leaves an orphan file (which the
+ * asset sweep reclaims) rather than a row pointing at a missing image.
  */
-export async function refreshSource(payload: Payload, sourceId: string | number): Promise<RefreshResult> {
-  const source = (await payload.findByID({ collection: 'sources', id: sourceId })) as Source
-
-  // Collected by the adapter as it runs (proxy, response status, timing,
-  // throttling headers) and stored even when the fetch throws, so proxy and
-  // blocking issues can be diagnosed from the admin dashboard.
-  const debug: Record<string, unknown> = {}
-
-  let result: RefreshResult
-  let profileFields: ProfileImageFields = {}
-  try {
-    // Each failed attempt retries on a fresh proxy IP (see the Instagram
-    // adapter); the admin-configured cap bounds how many times.
-    const maxAttempts = await getMaxFetchAttempts(payload)
-    const { items, profile } = await getAdapter(source.type).fetchItems(source, debug, maxAttempts)
-    const changes = await storeItems(payload, source, items)
-    // Mirror the account's profile picture into our bucket (see resolveProfileImage).
-    profileFields = await resolveProfileImage(payload, source, profile?.imageUrl, true)
-    result = { status: 'success', itemCount: items.length, changes, debug }
-  } catch (err) {
-    result = { status: 'error', error: describeError(err), debug }
-    payload.logger.warn(`Refresh failed for source "${source.name}": ${result.error}`)
-  }
-
-  await recordFetchOutcome(payload, source.id, result, profileFields)
-  return result
-}
-
-/**
- * Reconcile a source's stored feed-items with a fetch's results, mirroring each
- * stored item's image into our own bucket so feeds serve stable public URLs
- * (see resolveImage). Split out of {@link refreshSource} so the initial fetch
- * that happens while a source is being created (findOrCreateVerifiedSource)
- * can reuse the items it fetched to validate the account, without a second
- * request.
- *
- * Invariant: after this runs, the DB holds exactly the newest ≤N items (the
- * per-feed cap) of union(fetched, existing) by publishedAt. The target set is
- * computed in memory first and only the diff is written, so fetched items that
- * don't make the cut — e.g. an old pinned post the platform keeps serving —
- * are never inserted at all: no delete/re-create churn, no phantom activity,
- * no wasted image mirroring. The only creates are genuinely new items, and
- * each one counts as the source's daily activity via FeedItems' afterChange
- * hook; `skipActivity` suppresses that (the subscribe-time backfill seeds a
- * whole feed at once, which isn't activity).
- *
- * The diff is written as plain sequential statements (the adapter runs
- * without transactions — see payload.config.ts for why they must stay off),
- * so a client fetching the feed mid-reconciliation can briefly see a
- * partially applied item set; the window is only the row writes themselves,
- * since image mirroring (network I/O) happens while the diff is prepared.
- * Concurrent refreshes of the same source are guarded by the unique
- * (source, externalId) index — the loser fails and is recorded as a failed
- * fetch. Deleting a feed item cascades to its mirrored S3 image via
- * FeedItems.afterDelete.
- *
- * Returns what the reconciliation did, so callers can report it (e.g. the
- * admin's manual-refresh toast shows how many items were new and pruned).
- */
-export async function storeItems(
-  payload: Payload,
-  source: Source,
-  items: NormalizedItem[],
-  opts: { mirrorImages?: boolean; skipActivity?: boolean } = {},
-): Promise<ItemChanges> {
-  const { mirrorImages = true, skipActivity = false } = opts
-
-  const limit = await getMaxItemsPerFeed(payload)
-  const existing = await payload.find({
-    collection: 'feed-items',
-    where: { source: { equals: source.id } },
-    pagination: false,
-    depth: 0,
-  })
-
-  // Union of fetched and existing, keyed by externalId. An entry can carry the
-  // stored doc, the fetched item, or both.
-  const union = new Map<string, { publishedAt: number; fetched?: NormalizedItem; doc?: FeedItem }>()
-  for (const doc of existing.docs) {
-    union.set(doc.externalId, { publishedAt: new Date(doc.publishedAt).getTime(), doc })
-  }
-  for (const item of items) {
-    union.set(item.externalId, {
-      publishedAt: item.publishedAt.getTime(),
-      fetched: item,
-      doc: union.get(item.externalId)?.doc,
-    })
-  }
-
-  const target = [...union.values()]
-    .sort((a, b) => b.publishedAt - a.publishedAt)
-    .slice(0, limit)
-  const targetExternalIds = new Set(
-    target.map((entry) => entry.fetched?.externalId ?? entry.doc!.externalId),
-  )
-
-  // Prepare all document data up front: buildItemData mirrors images (network
-  // I/O), so doing it here keeps the row-write phase below short. Updates
-  // refresh stored items the fetch returned again (content edits, and the
-  // signed-CDN→bucket URL rewrite in resolveImage); stored items the fetch
-  // didn't return are left untouched.
-  const updates: { id: number; data: FeedItemData }[] = []
-  for (const entry of target) {
-    if (entry.fetched && entry.doc) {
-      updates.push({
-        id: entry.doc.id,
-        data: await buildItemData(payload, source, entry.fetched, entry.doc, mirrorImages),
-      })
+export async function refreshSource(sourceId: number): Promise<RefreshResult> {
+  // Read the row here rather than trusting a caller's copy: `profile_asset` and
+  // `consecutive_failures` drive mirror-once and backoff decisions, and acting on
+  // a stale snapshot would silently re-download the avatar on every refresh.
+  const source = getSource(sourceId)
+  if (!source) {
+    return {
+      status: 'error',
+      itemCount: 0,
+      created: 0,
+      updated: 0,
+      deleted: 0,
+      mirrored: 0,
+      httpStatus: null,
+      durationMs: null,
+      error: `source ${sourceId} no longer exists`,
     }
   }
-  const deletes = existing.docs.filter((doc) => !targetExternalIds.has(doc.externalId))
-  const creates: FeedItemData[] = []
-  for (const entry of target.filter((e) => e.fetched && !e.doc).sort((a, b) => a.publishedAt - b.publishedAt)) {
-    creates.push(await buildItemData(payload, source, entry.fetched!, undefined, mirrorImages))
+
+  const debug: Record<string, unknown> = {}
+  const fetchId = randomUUID()
+
+  let feed: NormalizedFeed
+  try {
+    feed = await getAdapter(source.type).fetchItems(source, debug, config.maxFetchAttempts)
+  } catch (err) {
+    return recordFailure(source, err, debug, fetchId)
   }
-  const changes: ItemChanges = {
+
+  const existing = listItems(source.id)
+  const plan = planReconcile(existing, feed.items, config.maxItemsPerFeed)
+
+  // --- network phase: mirror images before anything is written -------------
+  let mirrored = 0
+  const updates: { id: number; data: ItemData }[] = []
+  for (const { existing: row, fetched } of plan.updates) {
+    const image = await resolveImage(source, fetched, row)
+    if (image.mirroredNow) mirrored++
+    const data = itemData(fetched, image)
+    // Most refreshes re-fetch the same posts unchanged. Skipping the identical
+    // rows keeps the write phase empty, and — because `updated_at` only moves
+    // when something really changed — leaves every reader's cached ETag valid,
+    // so an hourly refresh of a quiet account costs no reader any bandwidth.
+    if (!isUnchanged(row, data)) updates.push({ id: row.id, data })
+  }
+  const creates: ItemData[] = []
+  for (const item of plan.creates) {
+    const image = await resolveImage(source, item, undefined)
+    if (image.mirroredNow) mirrored++
+    creates.push(itemData(item, image))
+  }
+  const profile = await resolveProfileImage(source, feed.profile?.imageUrl)
+
+  // --- commit --------------------------------------------------------------
+  const changed =
+    creates.length > 0 ||
+    plan.deletes.length > 0 ||
+    updates.length > 0 ||
+    profile.profileImageUrl !== undefined
+
+  const httpStatus = typeof debug.httpStatus === 'number' ? debug.httpStatus : null
+  const durationMs = typeof debug.durationMs === 'number' ? debug.durationMs : null
+
+  const outcome: SourceOutcome = {
+    status: 'success',
+    error: null,
+    httpStatus,
+    durationMs,
+    nextFetchAt: Date.now() + config.refreshIntervalMinutes * 60_000,
+    consecutiveFailures: 0,
+    permanentError: null,
+    permanentErrorKind: null,
+    name: feed.profile?.title ?? `@${source.handle}`,
+    description: feed.profile?.description ?? null,
+    ...profile,
+    bumpUpdatedAt: changed,
+  }
+
+  commitRefresh(
+    source.id,
+    { updates, deletes: plan.deletes.map((row) => row.id), creates },
+    outcome,
+    attemptLog(source.id, fetchId, debug, { status: 'success', httpStatus, durationMs }),
+  )
+
+  // --- post-commit cleanup -------------------------------------------------
+  const doomed = plan.deletes
+    .map((row) => row.asset)
+    .filter((name): name is string => name !== null)
+  await unlinkAssets(doomed)
+
+  return {
+    status: 'success',
+    itemCount: existing.length + creates.length - plan.deletes.length,
     created: creates.length,
     updated: updates.length,
-    deleted: deletes.length,
+    deleted: plan.deletes.length,
+    mirrored,
+    httpStatus,
+    durationMs,
   }
-  if (updates.length === 0 && deletes.length === 0 && creates.length === 0) return changes
-
-  // Apply the diff sequentially.
-  for (const update of updates) {
-    await payload.update({ collection: 'feed-items', id: update.id, data: update.data, depth: 0 })
-  }
-  for (const doomed of deletes) {
-    await payload.delete({ collection: 'feed-items', id: doomed.id, depth: 0 })
-  }
-  for (const data of creates) {
-    await payload.create({
-      collection: 'feed-items',
-      data,
-      depth: 0,
-      // FeedItems.afterChange counts each created item as daily activity
-      // unless told not to.
-      context: { skipActivity },
-    })
-  }
-  return changes
 }
 
-type FeedItemData = Awaited<ReturnType<typeof buildItemData>>
+/**
+ * Record a failed fetch. Nothing about the cached items changes — only the
+ * source's status and when to try again. A transient failure (a burned proxy
+ * exit IP) backs off in minutes; an account that can't work at all backs off to
+ * once a day, but never stops being retried, because private/renamed accounts
+ * come back and Instagram occasionally 404s a live profile.
+ */
+function recordFailure(
+  source: SourceRow,
+  err: unknown,
+  debug: Record<string, unknown>,
+  fetchId: string,
+): RefreshResult {
+  const error = describeError(err)
+  const permanent = err instanceof PermanentFetchError
+  const failures = source.consecutive_failures + 1
+  const httpStatus = typeof debug.httpStatus === 'number' ? debug.httpStatus : null
+  const durationMs = typeof debug.durationMs === 'number' ? debug.durationMs : null
 
-/** The feed-item document fields for a fetched item, with its image resolved
- * (see resolveImage). Shared by the update and create branches of storeItems. */
-async function buildItemData(
-  payload: Payload,
-  source: Source,
-  item: NormalizedItem,
-  existing: FeedItem | undefined,
-  mirrorImages: boolean,
-) {
-  const image = await resolveImage(payload, source, item, existing, mirrorImages)
+  const backoff = permanent
+    ? config.permanentErrorBackoffMs
+    : Math.min(
+        config.refreshIntervalMinutes * 60_000,
+        config.retryBackoffMs * 2 ** Math.min(failures - 1, 8),
+      )
+
+  commitRefresh(
+    source.id,
+    { updates: [], deletes: [], creates: [] },
+    {
+      status: 'error',
+      error,
+      httpStatus,
+      durationMs,
+      nextFetchAt: Date.now() + backoff,
+      consecutiveFailures: failures,
+      permanentError: permanent ? error : null,
+      permanentErrorKind: permanent ? (err as PermanentFetchError).kind : null,
+      // The feed body is unchanged, so cached ETags stay valid.
+      bumpUpdatedAt: false,
+    },
+    attemptLog(source.id, fetchId, debug, { status: 'error', httpStatus, durationMs, error }),
+  )
+
   return {
-    source: source.id,
-    externalId: item.externalId,
-    title: item.title,
-    content: image.content,
-    url: item.url,
-    imageUrl: image.imageUrl,
-    image: image.image,
-    publishedAt: item.publishedAt.toISOString(),
+    status: 'error',
+    itemCount: 0,
+    created: 0,
+    updated: 0,
+    deleted: 0,
+    mirrored: 0,
+    httpStatus,
+    durationMs,
+    error,
   }
+}
+
+/**
+ * One fetch-log row per attempt, all sharing a fetch id, so retries count as
+ * their own requests when diagnosing proxy trouble. Adapters that don't report
+ * per-attempt records fall back to a single row from the final outcome.
+ */
+function attemptLog(
+  sourceId: number,
+  fetchId: string,
+  debug: Record<string, unknown>,
+  fallback: {
+    status: 'success' | 'error'
+    httpStatus: number | null
+    durationMs: number | null
+    error?: string
+  },
+): FetchLogEntry[] {
+  const attempts = Array.isArray(debug.attempts) ? (debug.attempts as AttemptRecord[]) : []
+  if (attempts.length > 0) {
+    return attempts.map((attempt, index) => ({
+      source_id: sourceId,
+      fetch_id: fetchId,
+      attempt: index + 1,
+      status: attempt.status,
+      error: attempt.error,
+      http_status: attempt.httpStatus,
+      duration_ms: attempt.durationMs,
+    }))
+  }
+  return [
+    {
+      source_id: sourceId,
+      fetch_id: fetchId,
+      attempt: 1,
+      status: fallback.status,
+      error: fallback.error ?? null,
+      http_status: fallback.httpStatus,
+      duration_ms: fallback.durationMs,
+    },
+  ]
 }
 
 interface ResolvedImage {
   imageUrl: string | null
-  image: number | null
+  asset: string | null
+  assetBytes: number | null
+  assetMime: string | null
   content: string
+  mirroredNow: boolean
 }
 
+/** Whether a stored row already holds exactly what this refresh would write. */
+function isUnchanged(row: ItemRow, data: ItemData): boolean {
+  return (
+    row.title === data.title &&
+    row.content === data.content &&
+    row.url === data.url &&
+    row.image_url === data.image_url &&
+    row.asset === data.asset &&
+    row.asset_bytes === data.asset_bytes &&
+    row.asset_mime === data.asset_mime &&
+    row.published_at === data.published_at
+  )
+}
+
+const itemData = (item: NormalizedItem, image: ResolvedImage): ItemData => ({
+  external_id: item.externalId,
+  title: item.title,
+  content: image.content,
+  url: item.url,
+  image_url: image.imageUrl,
+  asset: image.asset,
+  asset_bytes: image.assetBytes,
+  asset_mime: image.assetMime,
+  published_at: item.publishedAt.getTime(),
+})
+
 /**
- * Decide what image a feed item should serve. Platform image URLs (Instagram
- * CDN) are signed, expire after a few days, and are origin-restricted so not
- * every feed reader can load them — so the first time we see a post we
- * download its image once (a dozen posts × ~200 KB, negligible even on the
- * metered proxy) and store it in our public bucket, then serve that stable
- * URL in `imageUrl` and inside the content HTML.
+ * Decide what image a feed item should serve.
  *
- * On download/upload failure the item is stored with the raw CDN URL and no
- * stored image — feeds never lose a post over image trouble — and because
- * the stored URL is then not a bucket URL, the next refresh retries. That
- * same property backfills items that predate image mirroring.
+ * On download failure the item is stored with the raw CDN URL and no asset —
+ * feeds never lose a post over image trouble — and because `asset` is then null,
+ * the next refresh retries. That same property backfills items stored before
+ * mirroring was possible.
  */
 async function resolveImage(
-  payload: Payload,
-  source: Source,
+  source: SourceRow,
   item: NormalizedItem,
-  existing: FeedItem | undefined,
-  mirrorImages: boolean,
+  existing: ItemRow | undefined,
 ): Promise<ResolvedImage> {
-  const existingImageId = relationId(existing?.image)
-  const existingImage = typeof existingImageId === 'number' ? existingImageId : null
-  // No image, S3 off, or the caller deferred mirroring (e.g. subscribe seeds
-  // items fast and a background job mirrors them) — store the raw CDN URL. The
-  // stored URL is then not a bucket URL, so the next refresh (or the job) still
-  // mirrors it.
-  if (!item.imageUrl || !s3Enabled() || !mirrorImages) {
-    return { imageUrl: item.imageUrl ?? null, image: existingImage, content: item.content }
-  }
+  // Degraded: serve the platform URL and keep whatever we already had stored.
+  const bare = (content: string): ResolvedImage => ({
+    imageUrl: item.imageUrl ?? null,
+    asset: existing?.asset ?? null,
+    assetBytes: existing?.asset_bytes ?? null,
+    assetMime: existing?.asset_mime ?? null,
+    content,
+    mirroredNow: false,
+  })
 
-  // Already mirrored: keep the stored copy, but still swap the fresh signed
-  // CDN URL the adapter embedded in this fetch's content for the bucket URL.
-  if (existingImage && existing?.imageUrl && isPublicS3Url(existing.imageUrl)) {
+  if (!item.imageUrl || !config.mirrorImages) return bare(item.content)
+
+  // Already mirrored: keep the stored file (and its size/type, so the enclosure
+  // metadata survives), but still swap the fresh signed CDN URL this fetch
+  // embedded in the content for our own stable one.
+  if (existing?.asset) {
+    const url = assetUrl(existing.asset)
     return {
-      imageUrl: existing.imageUrl,
-      image: existingImage,
-      content: rewriteImageUrl(item.content, item.imageUrl, existing.imageUrl),
+      imageUrl: url,
+      asset: existing.asset,
+      assetBytes: existing.asset_bytes,
+      assetMime: existing.asset_mime,
+      content: rewriteImageUrl(item.content, item.imageUrl, url),
+      mirroredNow: false,
     }
   }
 
   try {
-    return await mirrorImageUrl(payload, source, {
-      imageUrl: item.imageUrl,
-      externalId: item.externalId,
-      content: item.content,
-    })
+    const stored = await storeImage(item.imageUrl, postAssetName(source.id, item.externalId))
+    return {
+      imageUrl: stored.url,
+      asset: stored.filename,
+      assetBytes: stored.bytes,
+      assetMime: stored.mime,
+      content: rewriteImageUrl(item.content, item.imageUrl, stored.url),
+      mirroredNow: true,
+    }
   } catch (err) {
-    payload.logger.warn(
-      `Could not mirror image for "${item.title}" (source "${source.name}"): ${describeError(err)}`,
-    )
-    return { imageUrl: item.imageUrl, image: existingImage, content: item.content }
+    log.warn('could not mirror image', {
+      handle: `@${source.handle}`,
+      post: item.externalId,
+      error: describeError(err),
+    })
+    return bare(item.content)
   }
 }
 
 /**
- * Download an image from a URL and store it in our public bucket, returning the
- * stable bucket URL and the created media doc's id. Throws on download/upload
- * failure so callers can decide how to degrade. The lower-level primitive shared
- * by post-image mirroring ({@link mirrorImageUrl}) and profile-image mirroring
- * ({@link resolveProfileImage}).
- */
-export async function storeImageFromUrl(
-  payload: Payload,
-  url: string,
-  name: string,
-): Promise<{ imageUrl: string; image: number }> {
-  const res = await outboundFetch(url, { signal: AbortSignal.timeout(20_000) })
-  if (!res.ok) {
-    throw new Error(`image request returned ${res.status}`)
-  }
-  const bytes = Buffer.from(await res.arrayBuffer())
-  const mimetype = res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg'
-  const media = await payload.create({
-    collection: 'media',
-    data: {},
-    file: { data: bytes, mimetype, name, size: bytes.byteLength },
-    depth: 0,
-  })
-  // Read the URL off the created doc, not the requested name — Payload
-  // suffixes filename collisions.
-  const imageUrl = media.url ?? publicS3Url(media.filename ?? '')
-  return { imageUrl, image: media.id }
-}
-
-/**
- * Download a platform image, store it in our public bucket, and return the
- * bucket URL plus the content HTML rewritten to point at it. Throws on
- * download/upload failure so callers can decide how to degrade. Shared by the
- * live refresh path ({@link resolveImage}) and the background mirror job, which
- * mirrors items that were seeded fast (without images) during subscribe.
- */
-export async function mirrorImageUrl(
-  payload: Payload,
-  source: Source,
-  item: { imageUrl: string; externalId: string; content: string },
-): Promise<{ imageUrl: string; image: number; content: string }> {
-  const stored = await storeImageFromUrl(payload, item.imageUrl, `${source.id}-${item.externalId}.jpg`)
-  return {
-    imageUrl: stored.imageUrl,
-    image: stored.image,
-    content: rewriteImageUrl(item.content, item.imageUrl, stored.imageUrl),
-  }
-}
-
-/** Source fields set by {@link resolveProfileImage}. */
-export interface ProfileImageFields {
-  profileImageUrl?: string
-  profileImage?: number
-}
-
-/**
- * Decide what profile image a source should serve as its RSS channel image.
- * Like {@link resolveImage} does for posts: Instagram's profile-pic CDN URL is
- * signed and origin-restricted, so we mirror it into our bucket once and serve
- * that stable URL thereafter.
+ * Mirror the account's profile picture, used as the RSS channel image.
  *
- * Mirror-once: a source whose profile image is already stored in the bucket is
- * left untouched — the signed CDN URL changes every fetch, so we can't cheaply
- * tell whether the avatar itself changed. On download/upload failure (or with
- * `mirror` false, e.g. subscribe seeds fast and a background job mirrors later)
- * we store the raw CDN URL and no media; because that stored URL is then not a
- * bucket URL, the next mirror attempt retries.
+ * Mirror-once: a source whose avatar is already stored is left alone, because
+ * the signed CDN URL changes on every fetch so we can't cheaply tell whether the
+ * picture itself changed. Returns an empty object when there is nothing to say,
+ * so a failed mirror never blanks an avatar a previous success stored.
  */
-export async function resolveProfileImage(
-  payload: Payload,
-  source: Source,
-  profileCdnUrl: string | undefined,
-  mirror: boolean,
-): Promise<ProfileImageFields> {
-  if (!profileCdnUrl) return {}
-
-  // Already mirrored: keep the stored copy (see mirror-once note above).
-  const existingImage = relationId(source.profileImage)
-  if (existingImage && source.profileImageUrl && isPublicS3Url(source.profileImageUrl)) {
-    return {}
-  }
-
-  // S3 off, or the caller deferred mirroring — store the raw CDN URL for now.
-  if (!s3Enabled() || !mirror) {
-    return { profileImageUrl: profileCdnUrl }
-  }
+async function resolveProfileImage(
+  source: SourceRow,
+  cdnUrl: string | undefined,
+): Promise<{ profileImageUrl?: string | null; profileAsset?: string | null }> {
+  if (!cdnUrl) return {}
+  if (source.profile_asset) return {}
+  if (!config.mirrorImages) return { profileImageUrl: cdnUrl, profileAsset: null }
 
   try {
-    const stored = await storeImageFromUrl(payload, profileCdnUrl, `${source.id}-profile.jpg`)
-    return { profileImageUrl: stored.imageUrl, profileImage: stored.image }
+    const stored = await storeImage(cdnUrl, profileAssetName(source.id, cdnUrl))
+    return { profileImageUrl: stored.url, profileAsset: stored.filename }
   } catch (err) {
-    payload.logger.warn(
-      `Could not mirror profile image for source "${source.name}": ${describeError(err)}`,
-    )
-    return { profileImageUrl: profileCdnUrl }
+    log.warn('could not mirror profile image', {
+      handle: `@${source.handle}`,
+      error: describeError(err),
+    })
+    // Serve the CDN URL for now; `profile_asset` stays null so we retry.
+    return { profileImageUrl: cdnUrl, profileAsset: null }
   }
 }
 
@@ -358,103 +381,4 @@ export async function resolveProfileImage(
  * (via the same escapeHtml), so replace that form as well as the raw one. */
 function rewriteImageUrl(content: string, from: string, to: string): string {
   return content.replaceAll(escapeHtml(from), escapeHtml(to)).replaceAll(from, to)
-}
-
-/** Record the outcome of a fetch on the source document so it is visible in the
- * admin dashboard (and so the source counts as fetched). */
-export async function recordFetchOutcome(
-  payload: Payload,
-  sourceId: string | number,
-  result: RefreshResult,
-  extraFields: ProfileImageFields = {},
-): Promise<void> {
-  await payload.update({
-    collection: 'sources',
-    id: sourceId,
-    data: {
-      lastFetchedAt: new Date().toISOString(),
-      lastFetchStatus: result.status,
-      lastFetchError: result.error ?? null,
-      lastFetchDebug: result.debug ?? {},
-      ...extraFields,
-    },
-    depth: 0,
-    context: { skipSourceRefresh: true },
-  })
-
-  // Append request-log rows for the trend chart / per-source health bar. This
-  // is history (the source fields above only hold the latest outcome), pruned
-  // after a week. When the adapter retried, it reports one record per attempt
-  // (debug.attempts) and we log each as its own request so retries count toward
-  // the health trend like any other; otherwise we fall back to a single row
-  // from the final outcome. Every row from this one refresh shares a `fetchId`
-  // so the health readout can group the retries back into a single session.
-  // Never let logging break a fetch — refreshSource is contracted not to throw.
-  try {
-    const source = typeof sourceId === 'string' ? Number(sourceId) : sourceId
-    const fetchId = crypto.randomUUID()
-    const debug = (result.debug ?? {}) as Record<string, unknown>
-    const attempts = Array.isArray(debug.attempts) ? (debug.attempts as AttemptRecord[]) : []
-    const rows =
-      attempts.length > 0
-        ? attempts.map((a) => ({
-            source,
-            fetchId,
-            status: a.status,
-            error: a.error ?? null,
-            httpStatus: typeof a.httpStatus === 'number' ? a.httpStatus : null,
-            durationMs: typeof a.durationMs === 'number' ? a.durationMs : null,
-          }))
-        : [
-            {
-              source,
-              fetchId,
-              status: result.status,
-              error: result.error ?? null,
-              httpStatus: typeof debug.httpStatus === 'number' ? debug.httpStatus : null,
-              durationMs: typeof debug.durationMs === 'number' ? debug.durationMs : null,
-            },
-          ]
-    for (const data of rows) {
-      await payload.create({ collection: 'request-logs', data, depth: 0 })
-    }
-  } catch (err) {
-    payload.logger.warn(`Could not write request log for source ${sourceId}: ${describeError(err)}`)
-  }
-}
-
-/**
- * Node's `fetch` reports connection-level failures — including proxy errors —
- * as a bare "fetch failed", stashing the real reason on `err.cause` (and
- * sometimes nested further). Flatten the chain so the source's lastFetchError
- * shows the actionable detail: a proxy 407, ECONNREFUSED, a TLS error, etc.
- */
-export function describeError(err: unknown): string {
-  if (!(err instanceof Error)) return String(err)
-  const parts: string[] = []
-  const seen = new Set<unknown>()
-  let current: unknown = err
-  while (current instanceof Error && !seen.has(current)) {
-    seen.add(current)
-    const code = (current as { code?: string }).code
-    parts.push(code ? `${current.message} (${code})` : current.message)
-    current = (current as { cause?: unknown }).cause
-  }
-  // Drop consecutive duplicates (the top message often repeats its cause).
-  return parts.filter((part, i) => part !== parts[i - 1]).join(' — ')
-}
-
-/**
- * Refresh if the last fetch is older than the source's TTL. Returns true if
- * a refresh ran so the caller can re-read source and items.
- */
-export async function refreshSourceIfNeeded(payload: Payload, source: Source): Promise<boolean> {
-  const ttlMs = (source.refreshIntervalMinutes ?? 60) * 60_000
-  const sinceLastFetch = Date.now() - (source.lastFetchedAt ? new Date(source.lastFetchedAt).getTime() : 0)
-  if (sinceLastFetch <= ttlMs) {
-    return false
-  }
-
-  await refreshSource(payload, source.id)
-  return true
 }
