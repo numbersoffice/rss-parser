@@ -170,9 +170,17 @@ export function renderIndex(
     ? `<ul>\n${items}\n</ul>`
     : `<div class="empty">No feeds yet. Add an Instagram username to <code>accounts.txt</code>, one per line — it is published on the next deploy.</div>`
 
+  // The same PNG the landing pages fall back to, reused as the site favicon.
+  // Browsers accept a PNG icon directly, so no .ico conversion is needed. Left
+  // off the landing pages on purpose: those declare a per-feed icon (see
+  // renderLanding) that a competing site-wide default would only muddy.
+  const head =
+    `<link rel="icon" type="image/png" href="/feed-icon-fallback.png" />\n` +
+    `<link rel="apple-touch-icon" href="/feed-icon-fallback.png" />\n`
+
   return layout(
     'Feeds — rss-parser',
-    '',
+    head,
     `<h1>Feeds</h1>
 <p class="sub">${sources.length} Instagram account${sources.length === 1 ? '' : 's'} published as RSS. The list comes from <a href="https://github.com/numbersoffice/rss-parser/blob/main/accounts.txt"><code>accounts.txt</code></a>.</p>
 ${body}
