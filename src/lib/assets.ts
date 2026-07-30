@@ -152,6 +152,54 @@ export async function unlinkAssets(filenames: Iterable<string>): Promise<number>
   return removed
 }
 
+export interface AssetUsage {
+  files: number
+  bytes: number
+}
+
+/**
+ * How much disk the mirrored images take.
+ *
+ * Measured by walking the directory rather than summing the stored
+ * `asset_bytes`, because the question is what's actually on disk: profile
+ * pictures don't carry a byte count, and orphans waiting for the next sweep are
+ * real disk usage even though no row points at them.
+ *
+ * Memoised briefly so repeated page loads don't re-stat every file. The index
+ * page is uncached by design, and a few hundred stat calls per view would be a
+ * silly amount of work for a number that changes a few times an hour.
+ */
+const USAGE_TTL_MS = 60_000
+let usageCache: { at: number; usage: AssetUsage } | undefined
+
+export async function assetUsage(): Promise<AssetUsage> {
+  if (usageCache && Date.now() - usageCache.at < USAGE_TTL_MS) return usageCache.usage
+
+  const usage: AssetUsage = { files: 0, bytes: 0 }
+  try {
+    for (const entry of await fs.readdir(assetsDir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue
+      try {
+        const stat = await fs.stat(path.join(assetsDir, entry.name))
+        usage.files++
+        usage.bytes += stat.size
+      } catch {
+        // Swept between the readdir and the stat — just don't count it.
+      }
+    }
+  } catch (err) {
+    log.warn('could not measure asset usage', { error: describeError(err) })
+  }
+
+  usageCache = { at: Date.now(), usage }
+  return usage
+}
+
+/** Drop the memo after something is known to have changed it. */
+export function invalidateAssetUsage(): void {
+  usageCache = undefined
+}
+
 /** Leftover temp files from a crashed download. */
 export async function clearTmp(): Promise<void> {
   try {

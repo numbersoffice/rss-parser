@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import { assetsDir, config } from '../config.js'
 import { referencedAssets } from '../db.js'
 import { log } from '../log.js'
-import { assetPath, clearTmp } from '../lib/assets.js'
+import { assetPath, clearTmp, invalidateAssetUsage } from '../lib/assets.js'
 import { describeError } from '../lib/errors.js'
 import type { JobResult } from './scheduler.js'
 
@@ -53,5 +53,6 @@ export async function sweepAssets(): Promise<JobResult> {
   }
 
   if (removed === 0) return { skipped: true }
+  invalidateAssetUsage()
   return { fields: { removed, kb: Math.round(bytes / 1024) } }
 }

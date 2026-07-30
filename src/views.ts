@@ -2,6 +2,7 @@ import { prefixForType } from './adapters/registry.js'
 import { config } from './config.js'
 import type { ItemRow, SourceRow } from './db.js'
 import { type Average, formatPerDay } from './lib/activity.js'
+import type { AssetUsage } from './lib/assets.js'
 import { escapeHtml } from './lib/html.js'
 import { feedUrlFor, landingUrl, sourceLink } from './lib/rss.js'
 
@@ -91,6 +92,16 @@ function ago(ms: number | null): string {
   return `${Math.round(hours / 24)}d ago`
 }
 
+/** Byte sizes at a glance — powers of 1024, one decimal from MB up. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  if (kb < 1024) return `${Math.round(kb)} KB`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb.toFixed(1)} MB`
+  return `${(mb / 1024).toFixed(2)} GB`
+}
+
 function until(ms: number): string {
   const minutes = Math.round((ms - Date.now()) / 60_000)
   if (minutes <= 0) return 'due now'
@@ -123,6 +134,7 @@ export function renderIndex(
   sources: SourceRow[],
   counts: Map<number, number>,
   averages: Map<number, Average | null>,
+  usage: AssetUsage,
 ): string {
   const items = sources
     .map((source) => {
@@ -160,7 +172,8 @@ export function renderIndex(
     `<h1>Feeds</h1>
 <p class="sub">${sources.length} Instagram account${sources.length === 1 ? '' : 's'} published as RSS. The list comes from <code>accounts.txt</code>.</p>
 ${body}
-<footer>Refreshed every ${config.refreshIntervalMinutes} minutes, keeping the newest ${config.maxItemsPerFeed} posts per feed.</footer>`,
+<footer>Refreshed every ${config.refreshIntervalMinutes} minutes, keeping the newest ${config.maxItemsPerFeed} posts per feed.<br />
+Mirrored images: <strong>${formatBytes(usage.bytes)}</strong> across ${usage.files} file${usage.files === 1 ? '' : 's'}.</footer>`,
   )
 }
 

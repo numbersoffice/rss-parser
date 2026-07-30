@@ -120,6 +120,12 @@ signed URLs to any IP, while the profile API is the part that actually needs a
 residential exit. Set `imageFetch` in `src/config.ts` to `'proxy'` or `'direct'`
 to override.
 
+The index page footer shows what `data/assets/` currently occupies. It's
+measured by walking the directory rather than adding up stored sizes, so it
+reflects real disk usage — including profile pictures and any orphans still
+waiting for the next sweep — and it's memoised for a minute so viewing the page
+doesn't re-stat every file.
+
 ### Posts per day
 
 Each feed on the index page carries a small `3.4/day` figure — how many new posts
