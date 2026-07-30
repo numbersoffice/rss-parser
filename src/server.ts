@@ -17,6 +17,7 @@ import {
 import { type Average, averagePerDay, windowStartDay } from './lib/activity.js'
 import { log } from './log.js'
 import { syncAccounts } from './jobs/syncAccounts.js'
+import { checkProxyTraffic } from './jobs/checkProxyTraffic.js'
 import { pruneHistory } from './jobs/pruneHistory.js'
 import { refreshFeeds } from './jobs/refreshFeeds.js'
 import { Scheduler } from './jobs/scheduler.js'
@@ -24,6 +25,7 @@ import { sweepAssets } from './jobs/sweepAssets.js'
 import { assetUsage, recomputeAssetUsage } from './lib/assets.js'
 import { describeError } from './lib/errors.js'
 import { proxyEndpoint } from './lib/proxy.js'
+import { proxyTraffic } from './lib/proxyTraffic.js'
 import { buildRssXml } from './lib/rss.js'
 import { renderIndex, renderLanding } from './views.js'
 
@@ -60,7 +62,9 @@ app.get('/', (_req, res) => {
     ]),
   )
   res.set('cache-control', 'no-store')
-  res.type('html').send(renderIndex(sources, countItemsBySource(), averages, assetUsage()))
+  res
+    .type('html')
+    .send(renderIndex(sources, countItemsBySource(), averages, assetUsage(), proxyTraffic()))
 })
 
 /**
@@ -165,6 +169,11 @@ function lookup(prefix: string | undefined, rawHandle: string | undefined) {
 
 const scheduler = new Scheduler([
   { name: 'refresh-feeds', everyMs: config.tickIntervalMs, run: refreshFeeds },
+  {
+    name: 'check-proxy-traffic',
+    everyMs: config.proxyTrafficIntervalMinutes * 60_000,
+    run: checkProxyTraffic,
+  },
   { name: 'prune-history', everyMs: DAY_MS, run: pruneHistory },
   { name: 'sweep-assets', everyMs: DAY_MS, run: sweepAssets },
 ])

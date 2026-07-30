@@ -68,6 +68,14 @@ export const config = {
   refreshIntervalMinutes: 60,
 
   /**
+   * How often to poll the proxy provider (Decodo) for the residential plan's
+   * remaining traffic, shown in the status footer. Only runs when
+   * DECODO_API_TOKEN is set; the persisted job schedule caps it at this rate
+   * even across restarts, so a flapping container can't hammer the billing API.
+   */
+  proxyTrafficIntervalMinutes: 60,
+
+  /**
    * Download each post image once and serve it from our own /assets, instead
    * of linking Instagram's CDN. Their URLs are signed, expire after a few
    * days, and are origin-restricted, so many readers can't load them at all.

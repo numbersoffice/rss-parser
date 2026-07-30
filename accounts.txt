@@ -7,8 +7,6 @@
 # Blank lines and "#" comments are ignored. A leading "@" is optional and
 # usernames are matched case-insensitively.
 
-nasa
-natgeo
 agrayphot0
 alec_vierra
 dguttenfelder

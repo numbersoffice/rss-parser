@@ -4,6 +4,7 @@ import type { ItemRow, SourceRow } from './db.js'
 import { type Average, formatPerDay } from './lib/activity.js'
 import type { AssetUsage } from './lib/assets.js'
 import { escapeHtml } from './lib/html.js'
+import type { ProxyTraffic } from './lib/proxyTraffic.js'
 import { feedUrlFor, landingUrl, sourceLink } from './lib/rss.js'
 
 /**
@@ -137,6 +138,7 @@ export function renderIndex(
   counts: Map<number, number>,
   averages: Map<number, Average | null>,
   usage: AssetUsage,
+  traffic: ProxyTraffic | null,
 ): string {
   const items = sources
     .map((source) => {
@@ -175,7 +177,11 @@ export function renderIndex(
 <p class="sub">${sources.length} Instagram account${sources.length === 1 ? '' : 's'} published as RSS. The list comes from <a href="https://github.com/numbersoffice/rss-parser/blob/main/accounts.txt"><code>accounts.txt</code></a>.</p>
 ${body}
 <footer>Refreshed every ${config.refreshIntervalMinutes} minutes, keeping the newest ${config.maxItemsPerFeed} posts per feed.<br />
-Mirrored images: <strong>${formatBytes(usage.bytes)}</strong> across ${usage.files} file${usage.files === 1 ? '' : 's'}.</footer>`,
+Mirrored images: <strong>${formatBytes(usage.bytes)}</strong> across ${usage.files} file${usage.files === 1 ? '' : 's'}.${
+      traffic
+        ? `<br />\nProxy traffic remaining: <strong>${formatBytes(traffic.remainingBytes)}</strong> of ${formatBytes(traffic.limitBytes)}.`
+        : ''
+    }</footer>`,
   )
 }
 
