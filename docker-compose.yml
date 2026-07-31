@@ -17,6 +17,8 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       # Optional residential proxy; see .env.example.
       OUTBOUND_PROXY_URL: ${OUTBOUND_PROXY_URL:-}
+      # Optional Decodo dashboard API key for the proxy-traffic footer line.
+      DECODO_API_TOKEN: ${DECODO_API_TOKEN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       # SQLite database + mirrored images.
