@@ -32,11 +32,16 @@ export function proxyTraffic(): ProxyTraffic | null {
   return current
 }
 
-/** The one subscription field we read; Decodo reports the traffic figures in GB. */
+/**
+ * The subscription fields we read. Decodo reports the traffic figures in GB and,
+ * despite being numbers, serialises them as JSON strings ("1", "0.5"); parse
+ * with Number() before doing arithmetic. `traffic` is how much of the period's
+ * allowance has been burned so far.
+ */
 interface Subscription {
   service_type?: string
-  traffic_limit?: number
-  traffic_per_period?: number
+  traffic_limit?: string
+  traffic?: string
 }
 
 /**
@@ -59,12 +64,13 @@ export async function refreshProxyTraffic(): Promise<ProxyTraffic | null> {
 
   const subscriptions = (await res.json()) as Subscription[]
   const plan = subscriptions.find((s) => s.service_type === 'residential_proxies')
-  if (!plan || typeof plan.traffic_limit !== 'number') {
+  const limitGb = Number(plan?.traffic_limit)
+  if (!plan || !Number.isFinite(limitGb)) {
     throw new Error('no residential_proxies subscription in the Decodo response')
   }
 
-  const limitBytes = plan.traffic_limit * BYTES_PER_GB
-  const usedBytes = (plan.traffic_per_period ?? 0) * BYTES_PER_GB
+  const limitBytes = limitGb * BYTES_PER_GB
+  const usedBytes = (Number(plan.traffic) || 0) * BYTES_PER_GB
   // Clamp: an over-quota period would otherwise render a negative remainder.
   current = { remainingBytes: Math.max(0, limitBytes - usedBytes), limitBytes }
   return current
