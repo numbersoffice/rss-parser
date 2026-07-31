@@ -3,10 +3,14 @@
 
 # build output
 /dist
+/.next
 *.tsbuildinfo
 
 # runtime data: SQLite database + mirrored images
 /data
+/rss-parser.db
+/rss-parser.db-shm
+/rss-parser.db-wal
 
 # local env files
 .env
