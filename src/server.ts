@@ -6,15 +6,13 @@ import { assetsDir, config } from './config.js'
 import {
   closeDb,
   countItems,
-  countItemsBySource,
   findSource,
   initDb,
   listItemsForFeed,
   listSources,
   postsInWindow,
-  postsInWindowBySource,
 } from './db.js'
-import { type Average, averagePerDay, windowStartDay } from './lib/activity.js'
+import { averagePerDay, windowStartDay } from './lib/activity.js'
 import { log } from './log.js'
 import { syncAccounts } from './jobs/syncAccounts.js'
 import { checkProxyTraffic } from './jobs/checkProxyTraffic.js'
@@ -54,17 +52,8 @@ app.get('/healthz', (_req, res) => {
 
 app.get('/', (_req, res) => {
   const sources = listSources()
-  const posts = postsInWindowBySource(windowStartDay(config.activityWindowDays))
-  const averages = new Map<number, Average | null>(
-    sources.map((source) => [
-      source.id,
-      averagePerDay(posts.get(source.id) ?? 0, source.first_success_at, config.activityWindowDays),
-    ]),
-  )
   res.set('cache-control', 'no-store')
-  res
-    .type('html')
-    .send(renderIndex(sources, countItemsBySource(), averages, assetUsage(), proxyTraffic()))
+  res.type('html').send(renderIndex(sources, assetUsage(), proxyTraffic()))
 })
 
 /**
@@ -113,7 +102,9 @@ app.get('/f/:prefix/:handle', (req, res, next) => {
   const posts = postsInWindow(source.id, windowStartDay(config.activityWindowDays))
   const average = averagePerDay(posts, source.first_success_at, config.activityWindowDays)
   res.set('cache-control', 'public, max-age=3600')
-  res.type('html').send(renderLanding(source, listItemsForFeed(source.id, 15), average))
+  res
+    .type('html')
+    .send(renderLanding(source, listItemsForFeed(source.id, 15), average, countItems(source.id)))
 })
 
 /**
