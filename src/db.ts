@@ -389,17 +389,6 @@ export function deleteSource(id: number): string[] {
   return assets
 }
 
-/** Accounts due a fetch, most overdue first. */
-export function dueSources(limit: number): SourceRow[] {
-  return db()
-    .prepare<[number], SourceRow>(
-      `SELECT * FROM sources WHERE next_fetch_at <= ?
-        ORDER BY next_fetch_at ASC
-        LIMIT ${Math.max(1, Math.trunc(limit))}`,
-    )
-    .all(Date.now())
-}
-
 // --- items -----------------------------------------------------------------
 
 export function listItems(sourceId: number): ItemRow[] {

@@ -17,12 +17,12 @@ import { log } from './log.js'
 import { syncAccounts } from './jobs/syncAccounts.js'
 import { checkProxyTraffic } from './jobs/checkProxyTraffic.js'
 import { pruneHistory } from './jobs/pruneHistory.js'
-import { refreshFeeds } from './jobs/refreshFeeds.js'
 import { Scheduler } from './jobs/scheduler.js'
 import { sweepAssets } from './jobs/sweepAssets.js'
 import { assetUsage, recomputeAssetUsage } from './lib/assets.js'
 import { describeError } from './lib/errors.js'
 import { proxyEndpoint } from './lib/proxy.js'
+import { refreshQueue } from './lib/refreshQueue.js'
 import { proxyTraffic } from './lib/proxyTraffic.js'
 import { buildRssXml } from './lib/rss.js'
 import { renderIndex, renderLanding } from './views.js'
@@ -57,10 +57,12 @@ app.get('/', (_req, res) => {
 })
 
 /**
- * The RSS feed. Served purely from SQLite — nothing on the request path fetches
- * from Instagram, which is the biggest structural change from the version this
- * replaces (where the first reader to poll after the TTL expired paid the fetch
- * latency, and simultaneous polls could double-fetch).
+ * The RSS feed. Served entirely from SQLite — the response never waits on
+ * Instagram. A poll instead *triggers* a background refresh (fire-and-forget,
+ * capped to once an hour per account by `next_fetch_at`): the reader gets the
+ * cached feed instantly and any new posts surface on its next poll. This is what
+ * replaced the always-on hourly timer, so a feed only costs proxy traffic when
+ * something is actually reading it.
  *
  * `:handle.xml` is safe under Express 5's path-to-regexp v8: `.` isn't an
  * identifier character, so this parses as [param, literal ".xml"] and compiles
@@ -74,6 +76,12 @@ app.get('/feeds/:prefix/:handle.xml', (req, res) => {
     res.status(404).type('text').send('Feed not found')
     return
   }
+
+  // A poll is the "check for new posts" signal — kick a background refresh if the
+  // account is due. Before the 304 short-circuit below, so a reader that only
+  // ever gets 304s still keeps the feed fresh. Never awaited: the response is
+  // served from what's already stored.
+  refreshQueue.request(source)
 
   const count = countItems(source.id)
   // Both validators derive from updated_at, which only moves when the feed body
@@ -159,7 +167,6 @@ function lookup(prefix: string | undefined, rawHandle: string | undefined) {
 }
 
 const scheduler = new Scheduler([
-  { name: 'refresh-feeds', everyMs: config.tickIntervalMs, run: refreshFeeds },
   {
     name: 'check-proxy-traffic',
     everyMs: config.proxyTrafficIntervalMinutes * 60_000,
@@ -177,6 +184,15 @@ async function main(): Promise<void> {
   // up — there is no periodic re-read.
   await syncAccounts()
 
+  // Refreshes are on-demand now (a feed poll triggers one), so an account that
+  // has never fetched would otherwise serve an empty feed until someone happened
+  // to poll it. Seed those once, on the way up, through the same coordinator —
+  // its serial chain staggers them. `force` bypasses the due-check so a
+  // previously-failed account still gets a boot attempt.
+  for (const source of listSources()) {
+    if (source.first_success_at === null) refreshQueue.request(source, true)
+  }
+
   // The asset total is kept in memory and adjusted as images are stored and
   // deleted, so it has to be established once against the directory at startup.
   const usage = await recomputeAssetUsage()
@@ -190,7 +206,7 @@ async function main(): Promise<void> {
       // Never the proxy URL itself — it carries credentials.
       proxy: proxyEndpoint() ?? 'direct',
       images: config.mirrorImages ? config.imageFetch : 'off',
-      ttl: `${config.refreshIntervalMinutes}m`,
+      refresh: `on-demand, ≤${config.refreshIntervalMinutes}m`,
       keep: config.maxItemsPerFeed,
       accounts: config.accountsFile,
     })

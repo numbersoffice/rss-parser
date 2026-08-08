@@ -64,7 +64,12 @@ export const config = {
    */
   maxFetchAttempts: 3,
 
-  /** How stale an account's cached posts may get before it is refetched. */
+  /**
+   * Minimum interval between on-demand refreshes of one account. Refreshes are
+   * triggered by feed polls, not a timer (see lib/refreshQueue.ts); this is the
+   * cap that a poll respects — it drives `next_fetch_at`, so a feed polled every
+   * minute still refetches Instagram at most once an hour.
+   */
   refreshIntervalMinutes: 60,
 
   /**
@@ -110,17 +115,12 @@ export const config = {
   tickIntervalMs: 60_000,
 
   /**
-   * Refreshes started per tick, run one after another with a pause between.
-   * This is the throttle on outbound Instagram traffic: 3 per minute is 180
-   * accounts/hour of capacity against a 60-minute TTL, with never more than
-   * one request in flight, and it spreads a cold start over many minutes
-   * instead of firing every account at once.
+   * Pause the background refresh coordinator leaves between successive fetches
+   * when several are queued at once (e.g. a reader polls every feed together, or
+   * the boot seed). Keeps to never-more-than-one-request-in-flight and doesn't
+   * hammer the proxy pool back to back. See lib/refreshQueue.ts.
    */
-  refreshesPerTick: 3,
   refreshStaggerMs: 5_000,
-
-  /** Stop starting new refreshes once a tick has been running this long. */
-  refreshTickBudgetMs: 45_000,
 
   /**
    * Backoff after a failed fetch, doubling per consecutive failure and capped at
