@@ -20,6 +20,9 @@ export interface ExistingItem {
   external_id: string
   published_at: number
   asset: string | null
+  /** Extra gallery images as a JSON array (see db.ItemRow); carried so a doomed
+   * row's carousel files can be unlinked alongside its cover. */
+  gallery: string | null
 }
 
 export interface ReconcilePlan<E extends ExistingItem> {

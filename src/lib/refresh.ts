@@ -15,7 +15,15 @@ import {
   listItems,
 } from '../db.js'
 import { log } from '../log.js'
-import { postAssetName, profileAssetName, storeImage, unlinkAssets } from './assets.js'
+import {
+  type GalleryAsset,
+  galleryAssetNames,
+  parseGallery,
+  postAssetName,
+  profileAssetName,
+  storeImage,
+  unlinkAssets,
+} from './assets.js'
 import { describeError } from './errors.js'
 import { escapeHtml } from './html.js'
 import { planReconcile } from './plan.js'
@@ -151,9 +159,11 @@ export async function refreshSource(sourceId: number): Promise<RefreshResult> {
   )
 
   // --- post-commit cleanup -------------------------------------------------
-  const doomed = plan.deletes
-    .map((row) => row.asset)
-    .filter((name): name is string => name !== null)
+  // A pruned item takes its cover and every gallery child with it.
+  const doomed = plan.deletes.flatMap((row) => [
+    ...(row.asset !== null ? [row.asset] : []),
+    ...galleryAssetNames(row.gallery),
+  ])
   await unlinkAssets(doomed)
 
   return {
@@ -272,6 +282,8 @@ interface ResolvedImage {
   asset: string | null
   assetBytes: number | null
   assetMime: string | null
+  /** Extra gallery images (second onward); empty for a single-image post. */
+  gallery: GalleryAsset[]
   content: string
   mirroredNow: boolean
 }
@@ -286,6 +298,7 @@ function isUnchanged(row: ItemRow, data: ItemData): boolean {
     row.asset === data.asset &&
     row.asset_bytes === data.asset_bytes &&
     row.asset_mime === data.asset_mime &&
+    row.gallery === data.gallery &&
     row.published_at === data.published_at
   )
 }
@@ -299,6 +312,10 @@ const itemData = (item: NormalizedItem, image: ResolvedImage): ItemData => ({
   asset: image.asset,
   asset_bytes: image.assetBytes,
   asset_mime: image.assetMime,
+  // Reused children keep their original serialization (same key order,
+  // untouched imageUrl), so a quiet gallery re-serializes byte-identically and
+  // isUnchanged holds — no needless write, no reader ETag churn.
+  gallery: image.gallery.length > 0 ? JSON.stringify(image.gallery) : null,
   published_at: item.publishedAt.getTime(),
 })
 
@@ -315,52 +332,100 @@ async function resolveImage(
   item: NormalizedItem,
   existing: ItemRow | undefined,
 ): Promise<ResolvedImage> {
-  // Degraded: serve the platform URL and keep whatever we already had stored.
-  const bare = (content: string): ResolvedImage => ({
-    imageUrl: item.imageUrl ?? null,
-    asset: existing?.asset ?? null,
-    assetBytes: existing?.asset_bytes ?? null,
-    assetMime: existing?.asset_mime ?? null,
-    content,
-    mirroredNow: false,
-  })
+  // Every image in the post, cover first. A normal post has one; a carousel has
+  // its children (already capped in the adapter).
+  const images =
+    item.images && item.images.length > 0 ? item.images : item.imageUrl ? [item.imageUrl] : []
 
-  if (!item.imageUrl || !config.mirrorImages) return bare(item.content)
-
-  // Already mirrored: keep the stored file (and its size/type, so the enclosure
-  // metadata survives), but still swap the fresh signed CDN URL this fetch
-  // embedded in the content for our own stable one.
-  if (existing?.asset) {
-    const url = assetUrl(existing.asset)
+  // Nothing to mirror: serve the platform URLs and keep whatever we had stored.
+  if (images.length === 0 || !config.mirrorImages) {
     return {
-      imageUrl: url,
-      asset: existing.asset,
-      assetBytes: existing.asset_bytes,
-      assetMime: existing.asset_mime,
-      content: rewriteImageUrl(item.content, item.imageUrl, url),
+      imageUrl: item.imageUrl ?? null,
+      asset: existing?.asset ?? null,
+      assetBytes: existing?.asset_bytes ?? null,
+      assetMime: existing?.asset_mime ?? null,
+      gallery: parseGallery(existing?.gallery),
+      content: item.content,
       mirroredNow: false,
     }
   }
 
-  try {
-    const stored = await storeImage(item.imageUrl, postAssetName(source.id, item.externalId))
-    return {
-      imageUrl: stored.url,
-      asset: stored.filename,
-      assetBytes: stored.bytes,
-      assetMime: stored.mime,
-      content: rewriteImageUrl(item.content, item.imageUrl, stored.url),
-      mirroredNow: true,
-    }
-  } catch (err) {
+  // The signed CDN URLs the content embeds, swapped for our stable /assets URLs
+  // as each image resolves. A child that fails to mirror keeps its CDN URL, and
+  // because it leaves no gallery record the next refresh retries it.
+  const replacements: [from: string, to: string][] = []
+  let mirroredNow = false
+
+  const warn = (err: unknown): void =>
     log.warn('could not mirror image', {
       handle: `@${source.handle}`,
       post: item.externalId,
       error: describeError(err),
     })
-    return bare(item.content)
+
+  // --- cover (index 0): lives in the item's own asset columns ---------------
+  const coverUrl = images[0]!
+  let coverAsset: string | null = null
+  let coverBytes: number | null = null
+  let coverMime: string | null = null
+  if (existing?.asset) {
+    // Mirror-once: keep the stored file and its size/type, just re-point content.
+    coverAsset = existing.asset
+    coverBytes = existing.asset_bytes
+    coverMime = existing.asset_mime
+    replacements.push([coverUrl, assetUrl(existing.asset)])
+  } else {
+    try {
+      const stored = await storeImage(coverUrl, postAssetName(source.id, item.externalId))
+      coverAsset = stored.filename
+      coverBytes = stored.bytes
+      coverMime = stored.mime
+      replacements.push([coverUrl, stored.url])
+      mirroredNow = true
+    } catch (err) {
+      warn(err) // leave the CDN URL in place; asset stays null so we retry
+    }
+  }
+
+  // --- children (index ≥ 1): mirror-once, keyed by their deterministic name --
+  // Index prior children by base name (extension stripped) so a stored child is
+  // reused regardless of order or a gap an earlier failure left behind.
+  const priorByBase = new Map<string, GalleryAsset>()
+  for (const rec of parseGallery(existing?.gallery)) priorByBase.set(stripExtension(rec.asset), rec)
+
+  const gallery: GalleryAsset[] = []
+  for (let i = 1; i < images.length; i++) {
+    const url = images[i]!
+    const base = postAssetName(source.id, item.externalId, i)
+    const prior = priorByBase.get(base)
+    if (prior) {
+      gallery.push(prior)
+      replacements.push([url, assetUrl(prior.asset)])
+      continue
+    }
+    try {
+      const stored = await storeImage(url, base)
+      gallery.push({ asset: stored.filename, bytes: stored.bytes, mime: stored.mime, imageUrl: url })
+      replacements.push([url, stored.url])
+      mirroredNow = true
+    } catch (err) {
+      warn(err) // leave this child's CDN URL; no record, so it retries next time
+    }
+  }
+
+  return {
+    imageUrl: coverAsset ? assetUrl(coverAsset) : (item.imageUrl ?? null),
+    asset: coverAsset,
+    assetBytes: coverBytes,
+    assetMime: coverMime,
+    gallery,
+    content: applyReplacements(item.content, replacements),
+    mirroredNow,
   }
 }
+
+/** Drop a filename's extension, e.g. `3-abc-1.webp` → `3-abc-1`. */
+const stripExtension = (name: string): string => name.replace(/\.[^./]+$/, '')
 
 /**
  * Mirror the account's profile picture, used as the RSS channel image.
@@ -391,8 +456,13 @@ async function resolveProfileImage(
   }
 }
 
-/** Swap an image URL inside content HTML. Adapters embed URLs HTML-escaped
- * (via the same escapeHtml), so replace that form as well as the raw one. */
-function rewriteImageUrl(content: string, from: string, to: string): string {
-  return content.replaceAll(escapeHtml(from), escapeHtml(to)).replaceAll(from, to)
+/** Apply a batch of image-URL swaps to content HTML, in order. Adapters embed
+ * URLs HTML-escaped (via the same escapeHtml), so each swap replaces that form
+ * as well as the raw one. */
+function applyReplacements(content: string, replacements: [from: string, to: string][]): string {
+  let out = content
+  for (const [from, to] of replacements) {
+    out = out.replaceAll(escapeHtml(from), escapeHtml(to)).replaceAll(from, to)
+  }
+  return out
 }

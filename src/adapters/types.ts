@@ -11,8 +11,15 @@ export interface NormalizedItem {
   /** Permalink to the original post. */
   url: string
   /** The platform's own image URL (may be signed/expiring); the refresh
-   * logic mirrors it into our own asset directory. */
+   * logic mirrors it into our own asset directory. For a gallery this is the
+   * cover (the first of `images`), so the single RSS enclosure still resolves. */
   imageUrl?: string
+  /** Every image URL in the post, in order — length 1 for a normal post, more
+   * for a gallery/carousel. `images[0]` equals `imageUrl`. The refresh layer
+   * mirrors the cover into the item's asset columns and the rest into `gallery`;
+   * the content HTML already embeds one `<img>` per entry. Absent means the
+   * post carries no image (e.g. a bare caption). */
+  images?: string[]
   publishedAt: Date
 }
 

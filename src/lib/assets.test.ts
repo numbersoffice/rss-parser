@@ -11,7 +11,14 @@ process.env.DATA_DIR = root
 process.env.PUBLIC_BASE_URL = 'http://localhost:3000'
 
 const { assetsDir } = await import('../config.js')
-const { assetUsage, recomputeAssetUsage, unlinkAssets } = await import('./assets.js')
+const {
+  assetUsage,
+  galleryAssetNames,
+  parseGallery,
+  postAssetName,
+  recomputeAssetUsage,
+  unlinkAssets,
+} = await import('./assets.js')
 
 fs.mkdirSync(assetsDir, { recursive: true })
 after(() => fs.rmSync(root, { recursive: true, force: true }))
@@ -80,4 +87,33 @@ test('a failed resync leaves the previous total intact', async () => {
   fs.rmSync(assetsDir, { recursive: true, force: true })
   assert.deepEqual(await recomputeAssetUsage(), before, 'kept the last known good value')
   fs.mkdirSync(assetsDir, { recursive: true })
+})
+
+test('postAssetName keeps the cover name and indexes gallery children', () => {
+  // The cover must be byte-for-byte the historical name so existing files and
+  // rows keep resolving; children append their 1-based index.
+  assert.equal(postAssetName(3, 'abc'), '3-abc')
+  assert.equal(postAssetName(3, 'abc', 0), '3-abc')
+  assert.equal(postAssetName(3, 'abc', 1), '3-abc-1')
+  assert.equal(postAssetName(3, 'abc', 11), '3-abc-11')
+})
+
+test('gallery JSON round-trips to its asset filenames', () => {
+  const gallery = [
+    { asset: '3-abc-1.jpg', bytes: 10, mime: 'image/jpeg', imageUrl: 'https://cdn/1' },
+    { asset: '3-abc-2.webp', bytes: 20, mime: 'image/webp', imageUrl: 'https://cdn/2' },
+  ]
+  const json = JSON.stringify(gallery)
+  assert.deepEqual(parseGallery(json), gallery)
+  assert.deepEqual(galleryAssetNames(json), ['3-abc-1.jpg', '3-abc-2.webp'])
+})
+
+test('a null or malformed gallery yields no names, never throws', () => {
+  assert.deepEqual(galleryAssetNames(null), [])
+  assert.deepEqual(galleryAssetNames(undefined), [])
+  assert.deepEqual(galleryAssetNames(''), [])
+  assert.deepEqual(galleryAssetNames('not json'), [])
+  assert.deepEqual(galleryAssetNames('{"not":"an array"}'), [])
+  // An array whose entries lack a string `asset` contributes nothing.
+  assert.deepEqual(galleryAssetNames('[{"bytes":1},null,42]'), [])
 })

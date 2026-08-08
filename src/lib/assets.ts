@@ -26,6 +26,47 @@ export interface StoredAsset {
 }
 
 /**
+ * One extra gallery image mirrored for a carousel post, as stored in the item's
+ * `gallery` JSON column. The cover stays in the item's own asset columns; this
+ * covers the second image onward.
+ */
+export interface GalleryAsset {
+  /** Filename under data/assets. */
+  asset: string
+  bytes: number
+  mime: string
+  /** The CDN URL this file was mirrored from, so a later refresh can rewrite it
+   * in the content and recognise the child as already mirrored. */
+  imageUrl: string
+}
+
+/**
+ * Asset filenames referenced by an item's `gallery` JSON column. Tolerant of
+ * null/legacy/malformed values — a bad blob simply yields no names, so the
+ * orphan sweep and delete cascade never throw on one.
+ */
+export function galleryAssetNames(json: string | null | undefined): string[] {
+  return parseGallery(json).map((entry) => entry.asset)
+}
+
+/** Parse a `gallery` JSON column into records, defensively. */
+export function parseGallery(json: string | null | undefined): GalleryAsset[] {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (entry): entry is GalleryAsset =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof (entry as GalleryAsset).asset === 'string',
+    )
+  } catch {
+    return []
+  }
+}
+
+/**
  * Extension for a stored image. This matters more than it looks: `express.static`
  * derives Content-Type from the file extension, so a webp body saved as `.jpg`
  * is served as `image/jpeg` and some readers refuse to render it. (The S3 build
@@ -144,9 +185,16 @@ async function fetchImage(url: string): Promise<Response> {
   return outboundFetch(url, { signal: timeout() })
 }
 
-/** Stable asset base name for a post image: 1:1 with (source, post). */
-export const postAssetName = (sourceId: number, externalId: string): string =>
-  `${sourceId}-${sanitize(externalId)}`
+/**
+ * Stable asset base name for a post image, keyed by (source, post, index).
+ * `index` 0/undefined yields the historical `${sourceId}-${externalId}` name —
+ * the gallery cover, so existing single-image files keep their filenames — and
+ * each further carousel child appends `-${index}`.
+ */
+export const postAssetName = (sourceId: number, externalId: string, index = 0): string => {
+  const base = `${sourceId}-${sanitize(externalId)}`
+  return index > 0 ? `${base}-${index}` : base
+}
 
 /**
  * Profile pictures are content-hashed rather than named after the source, so the

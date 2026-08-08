@@ -6,6 +6,7 @@ import type {
   SourceAdapter,
 } from './types.js'
 import { PermanentFetchError, RetryableFetchError } from './types.js'
+import { config } from '../config.js'
 import { escapeHtml } from '../lib/html.js'
 import { outboundFetch, proxyEndpoint, randomSessionId, sessionForSource } from '../lib/proxy.js'
 
@@ -111,12 +112,23 @@ async function primeSession(
   }
 }
 
+interface IgSidecarChild {
+  display_url?: string
+  is_video?: boolean
+}
+
 interface IgTimelineMedia {
   id: string
   shortcode: string
   taken_at_timestamp: number
   display_url?: string
   is_video?: boolean
+  __typename?: string
+  /** Present on carousel ("GraphSidecar") posts: one node per gallery image,
+   * each with its own display_url — so the single profile fetch already carries
+   * every image and no per-post request is needed. Video children expose only
+   * their poster frame here, which is what we embed (as with top-level videos). */
+  edge_sidecar_to_children?: { edges?: Array<{ node: IgSidecarChild }> }
   edge_media_to_caption?: { edges?: Array<{ node?: { text?: string } }> }
 }
 
@@ -145,26 +157,48 @@ function pickHeaders(headers: Headers, names: string[]): Record<string, string> 
   return out
 }
 
+/** Every image URL in a post, in order: a carousel's children (each their own
+ * display_url), otherwise the single top-level display_url. Video children
+ * contribute their poster frame, matching how top-level videos are handled. */
+function imageUrls(media: IgTimelineMedia): string[] {
+  const children = media.edge_sidecar_to_children?.edges
+  if (children && children.length > 0) {
+    const urls = children.map((edge) => edge.node.display_url).filter((u): u is string => Boolean(u))
+    // Bound the gallery so one pathological carousel can't multiply the metered
+    // proxy bytes and disk; the default cap covers every real gallery. Always
+    // keep at least the cover.
+    if (urls.length > 0) return urls.slice(0, Math.max(1, config.maxGalleryImages))
+  }
+  return media.display_url ? [media.display_url] : []
+}
+
 function toItem(media: IgTimelineMedia, username: string): NormalizedItem {
   const caption = media.edge_media_to_caption?.edges?.[0]?.node?.text ?? ''
   const url = `https://www.instagram.com/p/${media.shortcode}/`
+  const images = imageUrls(media)
+  const isGallery = images.length > 1
 
   const parts: string[] = []
-  if (media.display_url) {
+  // One <img> per image, in order, so a gallery renders each frame one after
+  // another inside the single entry body.
+  for (const image of images) {
     parts.push(
-      `<p><a href="${escapeHtml(url)}"><img src="${escapeHtml(media.display_url)}" alt="" /></a></p>`,
+      `<p><a href="${escapeHtml(url)}"><img src="${escapeHtml(image)}" alt="" /></a></p>`,
     )
   }
   if (caption) {
     parts.push(`<p>${escapeHtml(caption).replaceAll('\n', '<br />')}</p>`)
   }
 
+  const kind = isGallery ? 'Gallery' : media.is_video ? 'Video' : 'Post'
   return {
     externalId: media.id,
-    title: caption ? firstLine(caption) : `${media.is_video ? 'Video' : 'Post'} by @${username}`,
+    title: caption ? firstLine(caption) : `${kind} by @${username}`,
     content: parts.join('\n') || `<p>Post by @${username}</p>`,
     url,
-    imageUrl: media.display_url,
+    // Cover keeps the single enclosure resolving; `images` carries the whole set.
+    imageUrl: images[0],
+    images,
     publishedAt: new Date(media.taken_at_timestamp * 1000),
   }
 }

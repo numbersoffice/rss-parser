@@ -3,6 +3,7 @@ import Database from 'better-sqlite3'
 
 import { assetsDir, config, dbFile, tmpDir } from './config.js'
 import { dayKey } from './lib/activity.js'
+import { galleryAssetNames } from './lib/assets.js'
 import { log } from './log.js'
 
 /**
@@ -70,6 +71,9 @@ export interface ItemRow {
   asset: string | null
   asset_bytes: number | null
   asset_mime: string | null
+  /** Extra gallery images (second onward) as a JSON array of GalleryAsset, or
+   * null for a single-image post. The cover stays in the asset columns above. */
+  gallery: string | null
   published_at: number
 }
 
@@ -83,6 +87,7 @@ export interface ItemData {
   asset: string | null
   asset_bytes: number | null
   asset_mime: string | null
+  gallery: string | null
   published_at: number
 }
 
@@ -135,6 +140,7 @@ CREATE TABLE IF NOT EXISTS items (
   asset TEXT,
   asset_bytes INTEGER,
   asset_mime TEXT,
+  gallery TEXT,
   published_at INTEGER NOT NULL,
   UNIQUE (source_id, external_id)
 );
@@ -222,6 +228,7 @@ export function initDb(): Database.Database {
 function addMissingColumns(): void {
   const columns: [table: string, column: string, decl: string][] = [
     ['sources', 'first_success_at', 'INTEGER'],
+    ['items', 'gallery', 'TEXT'],
   ]
   for (const [table, column, decl] of columns) {
     const existing = database!
@@ -360,6 +367,14 @@ export function deleteSource(id: number): string[] {
     )
     .all(id)
     .map((row) => row.asset)
+  // Carousel children too, so removing an account unlinks its whole gallery.
+  for (const row of db()
+    .prepare<[number], { gallery: string }>(
+      'SELECT gallery FROM items WHERE source_id = ? AND gallery IS NOT NULL',
+    )
+    .all(id)) {
+    assets.push(...galleryAssetNames(row.gallery))
+  }
   const source = getSource(id)
   if (source?.profile_asset) assets.push(source.profile_asset)
 
@@ -462,15 +477,15 @@ export function commitRefresh(
   const update = db().prepare(
     `UPDATE items SET title = @title, content = @content, url = @url,
        image_url = @image_url, asset = @asset, asset_bytes = @asset_bytes,
-       asset_mime = @asset_mime, published_at = @published_at
+       asset_mime = @asset_mime, gallery = @gallery, published_at = @published_at
      WHERE id = @id`,
   )
   const remove = db().prepare('DELETE FROM items WHERE id = ?')
   const create = db().prepare(
     `INSERT INTO items (source_id, external_id, title, content, url, image_url,
-       asset, asset_bytes, asset_mime, published_at)
+       asset, asset_bytes, asset_mime, gallery, published_at)
      VALUES (@source_id, @external_id, @title, @content, @url, @image_url,
-       @asset, @asset_bytes, @asset_mime, @published_at)`,
+       @asset, @asset_bytes, @asset_mime, @gallery, @published_at)`,
   )
   const logAttempt = db().prepare(
     `INSERT INTO fetch_log (source_id, fetch_id, attempt, status, error, http_status, duration_ms, created_at)
@@ -612,10 +627,20 @@ export function referencedAssets(): Set<string> {
   const items = db()
     .prepare<[], { asset: string }>('SELECT asset FROM items WHERE asset IS NOT NULL')
     .all()
+  // Gallery children live in a JSON column, so they can't be filtered in SQL —
+  // pull every non-null blob and expand it. Kept separate from the cover query
+  // so a legacy/empty gallery adds nothing.
+  const galleries = db()
+    .prepare<[], { gallery: string }>('SELECT gallery FROM items WHERE gallery IS NOT NULL')
+    .all()
   const profiles = db()
     .prepare<[], { profile_asset: string }>(
       'SELECT profile_asset FROM sources WHERE profile_asset IS NOT NULL',
     )
     .all()
-  return new Set([...items.map((r) => r.asset), ...profiles.map((r) => r.profile_asset)])
+  return new Set([
+    ...items.map((r) => r.asset),
+    ...galleries.flatMap((r) => galleryAssetNames(r.gallery)),
+    ...profiles.map((r) => r.profile_asset),
+  ])
 }

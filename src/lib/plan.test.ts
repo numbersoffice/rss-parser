@@ -22,6 +22,7 @@ const stored = (id: number, externalId: string, day: number): ExistingItem => ({
   external_id: externalId,
   published_at: BASE + day * DAY,
   asset: `${id}.jpg`,
+  gallery: null,
 })
 
 test('seeds an empty feed, oldest first so ids follow chronology', () => {

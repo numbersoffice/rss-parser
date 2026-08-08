@@ -98,6 +98,14 @@ export const config = {
   /** Refuse an image larger than this, so one bad URL can't fill the volume. */
   maxImageBytes: 8 * 1024 * 1024,
 
+  /**
+   * Most images to mirror and render for a single gallery/carousel post. A
+   * carousel can hold ~20 images and each is a metered proxy download plus disk,
+   * so this caps the worst case; the default covers every real gallery, so in
+   * practice all images are shown. The cover always counts as the first.
+   */
+  maxGalleryImages: 20,
+
   /** How often the scheduler wakes up to see which jobs are due. */
   tickIntervalMs: 60_000,
 
